@@ -4,6 +4,11 @@
 A full-stack **real-time chat application** built with **MERN Stack**, **Socket.IO**, and **Cloudinary**.  
 It provides secure authentication, real-time messaging, profile management, and online status tracking.
 
+## 🚀 Live Demo
+- [link:](https://quick-chat-tau.vercel.app/)
+
+---
+
 ---
 
 ## ✨ Features
@@ -126,11 +131,6 @@ npm run dev
 
 ---
 
-## 📸 Screenshots (Optional)
-
-*Add screenshots of login, chat screen, and profile update UI here.*
-
----
 
 ## 🤝 Contributing
 
