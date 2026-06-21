@@ -20,6 +20,7 @@ export const useKeyboardShortcuts = ({
   onOpenConversation,
   onSendShortcut,
   onToggleCheatsheet,
+  isOverlayOpen = false,
 }) => {
   useEffect(() => {
     const handleKeyDown = (event) => {
@@ -40,9 +41,12 @@ export const useKeyboardShortcuts = ({
       }
 
       if (key === "Escape") {
+        event.preventDefault();
         onEscape?.();
         return;
       }
+
+      if (isOverlayOpen) return;
 
       if (targetIsTyping) return;
 
@@ -73,6 +77,7 @@ export const useKeyboardShortcuts = ({
     window.addEventListener("keydown", handleKeyDown);
     return () => window.removeEventListener("keydown", handleKeyDown);
   }, [
+    isOverlayOpen,
     onEscape,
     onFocusSearch,
     onOpenConversation,

@@ -8,6 +8,8 @@ const Sidebar = ({
   focusSearchSignal = 0,
   escapeSignal = 0,
   keyboardUserId,
+  onFilteredUsersChange = () => {},
+  onMenuOpenChange = () => {},
   onKeyboardUserHover,
 }) => {
   const {
@@ -51,6 +53,15 @@ const Sidebar = ({
   useEffect(() => {
     getUsers();
   }, [onlineUsers, getUsers]);
+
+  useEffect(() => {
+    onFilteredUsersChange(filteredUsers.map((user) => user._id));
+  }, [filteredUsers, onFilteredUsersChange]);
+
+  useEffect(() => {
+    onMenuOpenChange(menuOpen);
+    return () => onMenuOpenChange(false);
+  }, [menuOpen, onMenuOpenChange]);
 
   useEffect(() => {
     if (!focusSearchSignal) return;
@@ -138,7 +149,7 @@ const Sidebar = ({
               Instant conversations, elevated.
             </p>
           </div>
-          <div className="relative" ref={menuRef} aria-live="polite">
+          <div className="relative" ref={menuRef}>
             <button
               ref={menuTriggerRef}
               type="button"
@@ -146,19 +157,20 @@ const Sidebar = ({
               aria-haspopup="menu"
               aria-expanded={menuOpen}
               aria-controls="sidebar-actions-menu"
-              className="h-10 w-10 rounded-xl glass-subtle border border-white/15 flex items-center justify-center hover:border-white/30"
+              className="icon-btn"
+              aria-label="Open sidebar actions"
             >
               <img
                 src={assets.menu_icon}
-                alt="menu-icon"
-                className="h-4 w-4 cursor-pointer"
+                alt=""
+                className="h-4 w-4"
               />
             </button>
             {menuOpen && (
               <div
                 id="sidebar-actions-menu"
                 role="menu"
-                className="absolute top-12 right-0 z-20 w-52 p-2 rounded-xl glass-panel animate-slide-up"
+                className="absolute top-12 right-0 z-20 w-52 p-2 menu-surface animate-slide-up"
               >
                 <button
                   type="button"
@@ -210,13 +222,13 @@ const Sidebar = ({
                   className="w-full text-left px-3 py-2 rounded-lg text-sm hover:bg-white/10 text-rose-200 flex items-center gap-2"
                 >
                   <span className="h-2 w-2 rounded-full bg-rose-400" />
-                  Logout
+                  Log out
                 </button>
               </div>
             )}
           </div>
         </div>
-        <div className="glass-subtle rounded-2xl flex items-center gap-2 py-3 px-4 mt-5 border border-white/10 focus-within:border-brand-300/55 focus-within:shadow-[0_0_0_3px_rgba(154,125,255,0.15)]">
+        <div className="field-shell flex items-center gap-2 py-3 px-4 mt-5">
           <img
             src={assets.search_icon}
             alt=""
@@ -231,7 +243,7 @@ const Sidebar = ({
             value={input}
             onChange={(e) => setInput(e.target.value)}
             type="text"
-            className="bg-transparent border-none outline-none text-white text-sm placeholder:text-white/45 flex-1"
+            className="field-input text-sm flex-1"
             placeholder="Search users..."
           />
           {input && (
@@ -246,7 +258,7 @@ const Sidebar = ({
         </div>
       </div>
 
-      <div className="mt-4 space-y-1" role="listbox" aria-label="Conversations">
+      <div className="mt-4 space-y-1" role="list" aria-label="Conversations">
         {usersLoading &&
           Array.from({ length: 7 }).map((_, index) => (
             <div key={index} className="flex items-center gap-3 px-2 py-3">
@@ -276,8 +288,9 @@ const Sidebar = ({
               <button
                 type="button"
                 key={user._id}
-                role="option"
-                aria-selected={isActive}
+                role="listitem"
+                aria-current={isActive ? "true" : undefined}
+                aria-label={`${user.fullName}${unseenMessages[user._id] ? `, ${unseenMessages[user._id]} unread` : ""}`}
                 onClick={() => {
                   setSelectedUser(user);
                   setUnseenMessages((prev) => ({ ...prev, [user._id]: 0 }));

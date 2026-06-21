@@ -66,6 +66,7 @@ const ProfilePage = () => {
             type="button"
             onClick={() => navigate(-1)}
             className="h-10 w-10 rounded-xl bg-white/10 border border-white/15 flex items-center justify-center"
+            aria-label="Go back"
           >
             <img src={assets.arrow_icon} alt="" className="w-6" />
           </button>
@@ -79,6 +80,7 @@ const ProfilePage = () => {
             <label
               htmlFor="avatar"
               className="glass-subtle rounded-2xl border border-white/12 px-4 py-3 flex items-center gap-3 cursor-pointer"
+              aria-label="Upload profile image"
             >
               <div className="relative h-11 w-11 rounded-full overflow-hidden border border-white/20">
                 <img src={previewUrl} alt="" className="h-full w-full object-cover" />
@@ -100,8 +102,11 @@ const ProfilePage = () => {
             </label>
 
             <div className="space-y-1.5">
-              <p className="text-sm text-white/75">Display Name</p>
+              <label htmlFor="profile-display-name" className="text-sm text-white/75">
+                Display name
+              </label>
               <input
+                id="profile-display-name"
                 onChange={(e) => setName(e.target.value)}
                 value={name}
                 type="text"
@@ -112,8 +117,11 @@ const ProfilePage = () => {
             </div>
 
             <div className="space-y-1.5">
-              <p className="text-sm text-white/75">Bio</p>
+              <label htmlFor="profile-bio" className="text-sm text-white/75">
+                Bio
+              </label>
               <textarea
+                id="profile-bio"
                 onChange={(e) => setBio(e.target.value)}
                 value={bio}
                 placeholder="Write profile bio"

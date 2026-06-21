@@ -14,7 +14,12 @@ export const App = () => {
       <div className="absolute inset-0 -z-20 bg-[radial-gradient(circle_at_12%_8%,rgba(138,101,255,0.34),transparent_30%),radial-gradient(circle_at_84%_14%,rgba(86,146,250,0.24),transparent_30%),radial-gradient(circle_at_54%_92%,rgba(126,76,244,0.22),transparent_35%)]" />
       <div className="absolute inset-0 -z-10 bg-[url('/bgImage.svg')] bg-cover bg-center opacity-20" />
       {authUser && connectionStatus !== "connected" && (
-        <div className="absolute top-0 left-0 right-0 z-50 px-4 py-2 text-center text-xs font-medium border-b border-amber-300/20 bg-amber-300/14 text-amber-100 backdrop-blur-md">
+        <div
+          role="status"
+          aria-live="polite"
+          aria-atomic="true"
+          className="absolute top-0 left-0 right-0 z-50 px-4 py-2 text-center text-xs font-medium border-b border-amber-300/20 bg-amber-300/14 text-amber-100 backdrop-blur-md"
+        >
           {connectionStatus === "connecting"
             ? "Connecting to quickCHAT real-time services..."
             : "Reconnecting... messages will sync once connected."}

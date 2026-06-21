@@ -73,6 +73,7 @@ const LoginPage = () => {
                   type="button"
                   onClick={() => setIsDataSubmitted(false)}
                   className="h-9 w-9 rounded-xl bg-white/10 border border-white/15 flex items-center justify-center"
+                  aria-label="Back to account details form"
                 >
                   <img src={assets.arrow_icon} alt="" className="w-5" />
                 </button>
@@ -88,6 +89,9 @@ const LoginPage = () => {
           <div className="space-y-3.5">
             {currState === "Sign Up" && !isDataSubmitted && (
               <div className="relative">
+                <label htmlFor="signup-full-name" className="sr-only">
+                  Full name
+                </label>
                 <span className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-white/45">
                   <svg width="16" height="16" viewBox="0 0 24 24" fill="none">
                     <path
@@ -97,6 +101,7 @@ const LoginPage = () => {
                   </svg>
                 </span>
                 <input
+                  id="signup-full-name"
                   onChange={(e) => setFullName(e.target.value)}
                   value={fullName}
                   placeholder="Full Name"
@@ -110,6 +115,9 @@ const LoginPage = () => {
             {!isDataSubmitted && (
               <>
                 <div className="relative">
+                  <label htmlFor="auth-email" className="sr-only">
+                    Email address
+                  </label>
                   <span className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-white/45">
                     <svg width="16" height="16" viewBox="0 0 24 24" fill="none">
                       <path
@@ -119,6 +127,7 @@ const LoginPage = () => {
                     </svg>
                   </span>
                   <input
+                    id="auth-email"
                     onChange={(e) => setEmail(e.target.value)}
                     value={email}
                     type="email"
@@ -129,6 +138,9 @@ const LoginPage = () => {
                 </div>
 
                 <div className="relative">
+                  <label htmlFor="auth-password" className="sr-only">
+                    Password
+                  </label>
                   <span className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-white/45">
                     <svg width="16" height="16" viewBox="0 0 24 24" fill="none">
                       <path
@@ -138,6 +150,7 @@ const LoginPage = () => {
                     </svg>
                   </span>
                   <input
+                    id="auth-password"
                     onChange={(e) => setPassWord(e.target.value)}
                     value={password}
                     type={showPassword ? "text" : "password"}
@@ -149,6 +162,7 @@ const LoginPage = () => {
                     type="button"
                     onClick={() => setShowPassword((prev) => !prev)}
                     className="absolute right-3 top-1/2 -translate-y-1/2 text-xs text-white/60 hover:text-white"
+                    aria-label={showPassword ? "Hide password" : "Show password"}
                   >
                     {showPassword ? "Hide" : "Show"}
                   </button>
@@ -157,19 +171,29 @@ const LoginPage = () => {
             )}
 
             {currState === "Sign Up" && isDataSubmitted && (
-              <textarea
-                onChange={(e) => setBio(e.target.value)}
-                value={bio}
-                rows={5}
-                className="w-full p-3 rounded-xl bg-white/8 border border-white/15 text-sm text-white placeholder:text-white/45"
-                placeholder="Tell us about yourself..."
-              />
+              <div>
+                <label htmlFor="signup-bio" className="sr-only">
+                  Bio
+                </label>
+                <textarea
+                  id="signup-bio"
+                  onChange={(e) => setBio(e.target.value)}
+                  value={bio}
+                  rows={5}
+                  className="w-full p-3 rounded-xl bg-white/8 border border-white/15 text-sm text-white placeholder:text-white/45"
+                  placeholder="Tell us about yourself..."
+                />
+              </div>
             )}
           </div>
 
           {currState === "Sign Up" && (
-            <label className="flex items-center gap-2 text-sm text-white/65">
+            <label
+              htmlFor="terms-consent"
+              className="flex items-center gap-2 text-sm text-white/65"
+            >
               <input
+                id="terms-consent"
                 type="checkbox"
                 checked={agreed}
                 onChange={(e) => setAgreed(e.target.checked)}
@@ -184,6 +208,7 @@ const LoginPage = () => {
             type="submit"
             disabled={isSubmitting}
             className="btn-gradient rounded-xl py-3.5 text-sm font-medium cursor-pointer disabled:opacity-60 disabled:cursor-not-allowed"
+            aria-busy={isSubmitting}
           >
             {isSubmitting
               ? "Please wait..."

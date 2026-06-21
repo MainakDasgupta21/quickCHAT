@@ -22,9 +22,19 @@ export const ChatProvider = ({ children }) => {
   const [typingUsers, setTypingUsers] = useState({});
   const [replyTo, setReplyTo] = useState(null);
   const hasLoadedUsersRef = useRef(false);
+  const selectedUserRef = useRef(null);
+  const usersRef = useRef([]);
 
   const { socket, axios, showNotification, playReceiveCue, playSendCue } =
     useContext(AuthContext);
+
+  useEffect(() => {
+    selectedUserRef.current = selectedUser;
+  }, [selectedUser]);
+
+  useEffect(() => {
+    usersRef.current = users;
+  }, [users]);
 
   const getUsers = useCallback(async () => {
     if (!hasLoadedUsersRef.current) {
@@ -48,7 +58,6 @@ export const ChatProvider = ({ children }) => {
   const getMessages = useCallback(
     async (userId) => {
       setMessagesLoading(true);
-      setMessages([]);
       setReplyTo(null);
 
       try {
@@ -225,7 +234,9 @@ export const ChatProvider = ({ children }) => {
         return updatedTypingUsers;
       });
 
-      if (selectedUser && newMessage.senderId === selectedUser._id) {
+      const activeSelectedUser = selectedUserRef.current;
+
+      if (activeSelectedUser && newMessage.senderId === activeSelectedUser._id) {
         newMessage.seen = true;
         setMessages((prevMessages) => [...prevMessages, newMessage]);
         playReceiveCue();
@@ -247,7 +258,9 @@ export const ChatProvider = ({ children }) => {
         }));
 
         playReceiveCue();
-        const sender = users.find((user) => user._id === newMessage.senderId);
+        const sender = usersRef.current.find(
+          (user) => user._id === newMessage.senderId
+        );
         showNotification(sender?.fullName || "New message", {
           body:
             newMessage.text ||
@@ -282,11 +295,12 @@ export const ChatProvider = ({ children }) => {
     });
 
     socket.on("messagesSeen", ({ from, messageIds = [] }) => {
+      const activeSelectedUser = selectedUserRef.current;
       if (
         !from ||
         !Array.isArray(messageIds) ||
         messageIds.length === 0 ||
-        selectedUser?._id !== from
+        activeSelectedUser?._id !== from
       ) {
         return;
       }
@@ -328,7 +342,7 @@ export const ChatProvider = ({ children }) => {
         )
       );
     });
-  }, [axios, playReceiveCue, selectedUser, showNotification, socket, users]);
+  }, [axios, playReceiveCue, showNotification, socket]);
 
   const unsubscribeFromMessages = useCallback(() => {
     if (!socket) return;

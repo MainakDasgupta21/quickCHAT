@@ -1,4 +1,12 @@
-import React, { useContext, useEffect, useMemo, useRef, useState } from "react";
+import React, {
+  Suspense,
+  lazy,
+  useContext,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+} from "react";
 import assets from "../assets/assets";
 import {
   formatDateDividerLabel,
@@ -8,12 +16,18 @@ import {
 import { ChatContext } from "../../context/ChatContext";
 import { AuthContext } from "../../context/AuthContext";
 import toast from "react-hot-toast";
-import EmojiPicker from "emoji-picker-react";
 import ReactionBar from "./ReactionBar";
 import MessageMenu from "./MessageMenu";
 import AudioMessage from "./AudioMessage";
+import RightSidebar from "./RightSidebar";
 
-const ChatContainer = ({ sendShortcutSignal = 0, escapeSignal = 0 }) => {
+const EmojiPicker = lazy(() => import("emoji-picker-react"));
+
+const ChatContainer = ({
+  sendShortcutSignal = 0,
+  escapeSignal = 0,
+  onOverlayOpenChange = () => {},
+}) => {
   const {
     messages,
     selectedUser,
@@ -59,6 +73,9 @@ const ChatContainer = ({ sendShortcutSignal = 0, escapeSignal = 0 }) => {
   const [searchQuery, setSearchQuery] = useState("");
   const [searchMatches, setSearchMatches] = useState([]);
   const [activeSearchMatchIndex, setActiveSearchMatchIndex] = useState(0);
+  const [openMessageMenuId, setOpenMessageMenuId] = useState(null);
+  const [openReactionPickerId, setOpenReactionPickerId] = useState(null);
+  const [isMobileDetailsOpen, setIsMobileDetailsOpen] = useState(false);
 
   const highlightText = (text) => {
     if (!searchQuery.trim()) return text;
@@ -274,11 +291,16 @@ const ChatContainer = ({ sendShortcutSignal = 0, escapeSignal = 0 }) => {
   useEffect(() => {
     if (selectedUser) {
       getMessages(selectedUser._id);
+      setShowSearch(false);
       setSearchQuery("");
       setSearchMatches([]);
       setActiveSearchMatchIndex(0);
       setPendingBelowCount(0);
       setIsNearBottom(true);
+      setOpenMessageMenuId(null);
+      setOpenReactionPickerId(null);
+      setShowComposerEmoji(false);
+      setIsMobileDetailsOpen(false);
     }
   }, [selectedUser, getMessages]);
 
@@ -331,6 +353,10 @@ const ChatContainer = ({ sendShortcutSignal = 0, escapeSignal = 0 }) => {
   useEffect(() => {
     if (!escapeSignal) return;
     setShowComposerEmoji(false);
+    setShowSearch(false);
+    setOpenMessageMenuId(null);
+    setOpenReactionPickerId(null);
+    setIsMobileDetailsOpen(false);
   }, [escapeSignal]);
 
   useEffect(() => {
@@ -415,6 +441,17 @@ const ChatContainer = ({ sendShortcutSignal = 0, escapeSignal = 0 }) => {
   };
 
   const activeSearchMatchId = searchMatchIds[activeSearchMatchIndex];
+  const hasInteractiveOverlayOpen =
+    showComposerEmoji ||
+    showSearch ||
+    Boolean(openMessageMenuId) ||
+    Boolean(openReactionPickerId) ||
+    isMobileDetailsOpen;
+
+  useEffect(() => {
+    onOverlayOpenChange(hasInteractiveOverlayOpen);
+    return () => onOverlayOpenChange(false);
+  }, [hasInteractiveOverlayOpen, onOverlayOpenChange]);
 
   return selectedUser ? (
     <div className="h-full min-h-0 flex flex-col bg-[linear-gradient(180deg,rgba(20,17,32,0.32),rgba(15,13,24,0.82))] relative">
@@ -446,15 +483,29 @@ const ChatContainer = ({ sendShortcutSignal = 0, escapeSignal = 0 }) => {
           <button
             type="button"
             onClick={() => setSelectedUser(null)}
-            className="md:hidden h-9 w-9 rounded-xl bg-white/8 border border-white/12 flex items-center justify-center"
+            className="md:hidden icon-btn h-9 w-9"
+            aria-label="Back to conversation list"
           >
             <img src={assets.arrow_icon} alt="Back" className="w-6" />
           </button>
           <button
             type="button"
-            onClick={() => setShowSearch((prev) => !prev)}
-            className="max-md:hidden h-9 w-9 rounded-xl bg-white/8 border border-white/12 flex items-center justify-center hover:bg-white/12"
+            onClick={() => {
+              setShowSearch((prev) => !prev);
+              setOpenMessageMenuId(null);
+              setOpenReactionPickerId(null);
+            }}
+            className="icon-btn h-9 w-9"
             aria-label="Toggle in-conversation search"
+            aria-pressed={showSearch}
+          >
+            <img src={assets.search_icon} alt="" className="w-4" />
+          </button>
+          <button
+            type="button"
+            onClick={() => setIsMobileDetailsOpen(true)}
+            className="md:hidden icon-btn h-9 w-9"
+            aria-label="Open contact details"
           >
             <img src={assets.help_icon} alt="" className="w-4" />
           </button>
@@ -501,6 +552,17 @@ const ChatContainer = ({ sendShortcutSignal = 0, escapeSignal = 0 }) => {
                 ? `${activeSearchMatchIndex + 1}/${searchMatchIds.length}`
                 : "0/0"}
             </span>
+            <button
+              type="button"
+              onClick={() => {
+                setShowSearch(false);
+                setSearchQuery("");
+              }}
+              className="h-9 w-9 rounded-lg border border-white/15 bg-white/8"
+              aria-label="Close search"
+            >
+              ×
+            </button>
           </div>
         )}
       </div>
@@ -669,7 +731,7 @@ const ChatContainer = ({ sendShortcutSignal = 0, escapeSignal = 0 }) => {
                     <div
                       className={`relative px-4 py-2.5 text-sm break-words leading-relaxed ${
                         isOwnMessage
-                          ? "text-white rounded-[18px] rounded-br-sm bg-[linear-gradient(135deg,#8b67ff_0%,#6d50f1_52%,#5539dd_100%)] shadow-[0_10px_24px_rgba(86,61,218,0.34)]"
+                          ? "text-white rounded-[18px] rounded-br-sm bg-[var(--gradient-brand)] shadow-[0_10px_24px_rgba(86,61,218,0.34)]"
                           : "text-white/92 rounded-[18px] rounded-bl-sm bg-white/8 border border-white/16 backdrop-blur-sm"
                       } ${
                         activeSearchMatchId === msg._id ? "ring-2 ring-brand-200/80 ring-offset-2 ring-offset-transparent" : ""
@@ -681,13 +743,29 @@ const ChatContainer = ({ sendShortcutSignal = 0, escapeSignal = 0 }) => {
                   )}
 
                     {!msg.isDeleted && (
-                      <div className="mt-1 opacity-0 group-hover:opacity-100 focus-within:opacity-100 transition-opacity">
+                      <div className="mt-1 opacity-100 md:opacity-0 md:group-hover:opacity-100 md:focus-within:opacity-100 transition-opacity">
                         <div className="flex items-center gap-1.5">
                           <ReactionBar
                             onSelectEmoji={(emoji) => reactToMessage(msg._id, emoji)}
+                            isPickerOpen={openReactionPickerId === msg._id}
+                            onPickerOpenChange={(open) => {
+                              setOpenReactionPickerId(open ? msg._id : null);
+                              if (open) {
+                                setOpenMessageMenuId(null);
+                              }
+                            }}
+                            closeSignal={escapeSignal}
                           />
                           <MessageMenu
                             canEdit={isOwnMessage}
+                            isOpen={openMessageMenuId === msg._id}
+                            onOpenChange={(open) => {
+                              setOpenMessageMenuId(open ? msg._id : null);
+                              if (open) {
+                                setOpenReactionPickerId(null);
+                              }
+                            }}
+                            closeSignal={escapeSignal}
                             onReply={() => {
                               setReplyTo(msg);
                               setEditingMessageId(null);
@@ -792,7 +870,7 @@ const ChatContainer = ({ sendShortcutSignal = 0, escapeSignal = 0 }) => {
             scrollToBottom();
             setPendingBelowCount(0);
           }}
-          className="absolute bottom-32 right-5 z-30 px-3 py-2 rounded-full btn-gradient text-xs font-medium shadow-soft"
+          className="absolute bottom-[calc(7rem+env(safe-area-inset-bottom))] right-4 sm:right-6 z-30 px-3 py-2 rounded-full btn-gradient text-xs font-medium shadow-soft"
         >
           {pendingBelowCount > 0 ? `${pendingBelowCount} new · ` : ""}
           Scroll to latest
@@ -908,9 +986,13 @@ const ChatContainer = ({ sendShortcutSignal = 0, escapeSignal = 0 }) => {
                 processFileInput(droppedFile);
               }
             }}
-            className="flex-1 flex items-center px-3.5 rounded-2xl glass-subtle border border-white/14 focus-within:border-brand-300/55 focus-within:shadow-[0_0_0_3px_rgba(154,125,255,0.15)]"
+            className="field-shell flex-1 flex items-center px-3.5"
           >
-            <label htmlFor="image" className="shrink-0">
+            <label
+              htmlFor="image"
+              className="shrink-0 cursor-pointer"
+              aria-label="Attach an image"
+            >
               <img
                 src={assets.gallery_icon}
                 alt="Attach image"
@@ -924,7 +1006,11 @@ const ChatContainer = ({ sendShortcutSignal = 0, escapeSignal = 0 }) => {
               accept="image/png, image/jpeg"
               hidden
             />
-            <label htmlFor="file-attachment" className="shrink-0 ml-2 text-white/70 text-sm cursor-pointer">
+            <label
+              htmlFor="file-attachment"
+              className="shrink-0 ml-2 text-white/70 text-sm cursor-pointer"
+              aria-label="Attach a file"
+            >
               📎
             </label>
             <input
@@ -941,9 +1027,19 @@ const ChatContainer = ({ sendShortcutSignal = 0, escapeSignal = 0 }) => {
             <button
               type="button"
               ref={composerEmojiTriggerRef}
-              onClick={() => setShowComposerEmoji((prev) => !prev)}
+              onClick={() =>
+                setShowComposerEmoji((prev) => {
+                  const nextValue = !prev;
+                  if (nextValue) {
+                    setOpenMessageMenuId(null);
+                    setOpenReactionPickerId(null);
+                  }
+                  return nextValue;
+                })
+              }
               className="shrink-0 ml-2 text-white/75 hover:text-white"
               aria-label="Open emoji picker"
+              aria-expanded={showComposerEmoji}
             >
               🙂
             </button>
@@ -975,23 +1071,32 @@ const ChatContainer = ({ sendShortcutSignal = 0, escapeSignal = 0 }) => {
               }
               type="text"
               placeholder="Type a message..."
-              className="flex-1 text-sm p-3.5 border-none rounded-lg outline-none text-white placeholder:text-white/45 bg-transparent"
+              className="flex-1 text-sm p-3.5 rounded-lg field-input"
+              aria-label="Type a message"
             />
           </div>
           {showComposerEmoji && (
             <div
               ref={composerEmojiRef}
-              className="absolute bottom-20 right-20 z-50"
+              className="fixed right-4 sm:right-8 bottom-[calc(6.5rem+env(safe-area-inset-bottom))] z-50"
             >
-              <EmojiPicker
-                lazyLoadEmojis
-                width={280}
-                height={340}
-                searchDisabled={false}
-                onEmojiClick={(emojiData) => {
-                  setInput((prev) => `${prev}${emojiData.emoji}`);
-                }}
-              />
+              <Suspense
+                fallback={
+                  <div className="h-80 w-[280px] rounded-xl glass-panel border border-white/15 flex items-center justify-center text-xs text-white/70">
+                    Loading emoji picker...
+                  </div>
+                }
+              >
+                <EmojiPicker
+                  lazyLoadEmojis
+                  width={280}
+                  height={340}
+                  searchDisabled={false}
+                  onEmojiClick={(emojiData) => {
+                    setInput((prev) => `${prev}${emojiData.emoji}`);
+                  }}
+                />
+              </Suspense>
             </div>
           )}
           <button
@@ -1004,6 +1109,13 @@ const ChatContainer = ({ sendShortcutSignal = 0, escapeSignal = 0 }) => {
           </button>
         </div>
       </div>
+
+      {isMobileDetailsOpen && (
+        <RightSidebar
+          mobileSheetOpen
+          onCloseMobileSheet={() => setIsMobileDetailsOpen(false)}
+        />
+      )}
     </div>
   ) : (
     <div className="max-md:hidden flex flex-col items-center justify-center text-center p-6 bg-[linear-gradient(180deg,rgba(17,14,28,0.42),rgba(10,9,17,0.75))]">

@@ -1,22 +1,61 @@
 import React, { useEffect, useRef, useState } from "react";
 
-const MessageMenu = ({ canEdit = false, onReply, onEdit, onDelete }) => {
-  const [open, setOpen] = useState(false);
+const MessageMenu = ({
+  canEdit = false,
+  onReply,
+  onEdit,
+  onDelete,
+  isOpen,
+  onOpenChange,
+  closeSignal = 0,
+}) => {
+  const [internalOpen, setInternalOpen] = useState(false);
   const menuRef = useRef(null);
   const triggerRef = useRef(null);
+  const open = typeof isOpen === "boolean" ? isOpen : internalOpen;
+
+  const setOpen = (valueOrUpdater) => {
+    const nextValue =
+      typeof valueOrUpdater === "function"
+        ? valueOrUpdater(open)
+        : valueOrUpdater;
+
+    if (typeof onOpenChange === "function") {
+      onOpenChange(Boolean(nextValue));
+      return;
+    }
+
+    setInternalOpen(Boolean(nextValue));
+  };
+
+  useEffect(() => {
+    if (!closeSignal) return;
+    if (typeof onOpenChange === "function") {
+      onOpenChange(false);
+      return;
+    }
+    setInternalOpen(false);
+  }, [closeSignal, onOpenChange]);
 
   useEffect(() => {
     if (!open) return;
+    const closeMenu = () => {
+      if (typeof onOpenChange === "function") {
+        onOpenChange(false);
+        return;
+      }
+      setInternalOpen(false);
+    };
 
     const handleClickOutside = (event) => {
       if (menuRef.current && !menuRef.current.contains(event.target)) {
-        setOpen(false);
+        closeMenu();
       }
     };
 
     const handleEscape = (event) => {
       if (event.key === "Escape") {
-        setOpen(false);
+        closeMenu();
         triggerRef.current?.focus();
       }
     };
@@ -28,7 +67,7 @@ const MessageMenu = ({ canEdit = false, onReply, onEdit, onDelete }) => {
       document.removeEventListener("mousedown", handleClickOutside);
       document.removeEventListener("keydown", handleEscape);
     };
-  }, [open]);
+  }, [onOpenChange, open]);
 
   return (
     <div className="relative" ref={menuRef}>
@@ -43,13 +82,18 @@ const MessageMenu = ({ canEdit = false, onReply, onEdit, onDelete }) => {
       </button>
 
       {open && (
-        <div className="absolute top-8 right-0 z-30 w-36 rounded-xl glass-panel p-1.5">
+        <div
+          role="menu"
+          aria-label="Message actions menu"
+          className="absolute top-8 right-0 z-30 w-36 rounded-xl menu-surface p-1.5"
+        >
           <button
             type="button"
             onClick={() => {
               onReply?.();
               setOpen(false);
             }}
+            role="menuitem"
             className="w-full text-left px-3 py-1.5 text-xs rounded-lg hover:bg-white/10"
           >
             Reply
@@ -62,6 +106,7 @@ const MessageMenu = ({ canEdit = false, onReply, onEdit, onDelete }) => {
                 onEdit?.();
                 setOpen(false);
               }}
+              role="menuitem"
               className="w-full text-left px-3 py-1.5 text-xs rounded-lg hover:bg-white/10"
             >
               Edit
@@ -75,6 +120,7 @@ const MessageMenu = ({ canEdit = false, onReply, onEdit, onDelete }) => {
                 onDelete?.();
                 setOpen(false);
               }}
+              role="menuitem"
               className="w-full text-left px-3 py-1.5 text-xs rounded-lg hover:bg-white/10 text-rose-200"
             >
               Delete

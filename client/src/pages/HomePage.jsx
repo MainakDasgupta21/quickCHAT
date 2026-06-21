@@ -1,4 +1,11 @@
-import React, { useCallback, useContext, useEffect, useState } from "react";
+import React, {
+  useCallback,
+  useContext,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+} from "react";
 import Sidebar from "../components/Sidebar";
 import ChatContainer from "../components/ChatContainer";
 import RightSidebar from "../components/RightSidebar";
@@ -12,56 +19,90 @@ const HomePage = () => {
   const [sendShortcutSignal, setSendShortcutSignal] = useState(0);
   const [isShortcutsOpen, setIsShortcutsOpen] = useState(false);
   const [keyboardUserIndex, setKeyboardUserIndex] = useState(0);
+  const [keyboardUserIds, setKeyboardUserIds] = useState([]);
+  const [isSidebarMenuOpen, setIsSidebarMenuOpen] = useState(false);
+  const [isChatOverlayOpen, setIsChatOverlayOpen] = useState(false);
+  const shortcutsBackdropRef = useRef(null);
+  const shortcutsDialogRef = useRef(null);
+  const shortcutsCloseButtonRef = useRef(null);
+  const shortcutsTriggerRef = useRef(null);
+
+  const navigationUsers = useMemo(() => {
+    if (!users.length) return [];
+    if (!keyboardUserIds.length) return users;
+
+    const userMap = new Map(users.map((user) => [user._id, user]));
+    return keyboardUserIds.map((id) => userMap.get(id)).filter(Boolean);
+  }, [keyboardUserIds, users]);
 
   useEffect(() => {
-    if (!users.length) {
+    if (!navigationUsers.length) {
       setKeyboardUserIndex(0);
       return;
     }
 
-    if (!selectedUser) return;
-    const selectedIndex = users.findIndex((user) => user._id === selectedUser._id);
+    if (!selectedUser) {
+      setKeyboardUserIndex((prevIndex) =>
+        prevIndex < navigationUsers.length ? prevIndex : 0
+      );
+      return;
+    }
+
+    const selectedIndex = navigationUsers.findIndex(
+      (user) => user._id === selectedUser._id
+    );
     if (selectedIndex >= 0) {
       setKeyboardUserIndex(selectedIndex);
     }
-  }, [selectedUser, users]);
+  }, [navigationUsers, selectedUser]);
 
   const focusSearch = useCallback(() => {
     setFocusSearchSignal((prev) => prev + 1);
   }, []);
 
   const handleEscape = useCallback(() => {
-    setSelectedUser(null);
-    setEscapeSignal((prev) => prev + 1);
-    setIsShortcutsOpen(false);
-  }, [setSelectedUser]);
+    if (isShortcutsOpen) {
+      setIsShortcutsOpen(false);
+      return;
+    }
+
+    if (isSidebarMenuOpen || isChatOverlayOpen) {
+      setEscapeSignal((prev) => prev + 1);
+      return;
+    }
+
+    if (selectedUser) {
+      setSelectedUser(null);
+    }
+  }, [isChatOverlayOpen, isShortcutsOpen, isSidebarMenuOpen, selectedUser, setSelectedUser]);
 
   const moveSelection = useCallback(
     (direction) => {
-      if (!users.length) return;
+      if (!navigationUsers.length) return;
       setKeyboardUserIndex((prevIndex) => {
         const baseIndex =
-          selectedUser && prevIndex < users.length
+          selectedUser && prevIndex < navigationUsers.length
             ? prevIndex
-            : users.findIndex((user) => user._id === selectedUser?._id);
+            : navigationUsers.findIndex((user) => user._id === selectedUser?._id);
 
         const normalizedIndex = baseIndex >= 0 ? baseIndex : 0;
         const nextIndex =
-          (normalizedIndex + direction + users.length) % users.length;
-        setSelectedUser(users[nextIndex]);
+          (normalizedIndex + direction + navigationUsers.length) %
+          navigationUsers.length;
+        setSelectedUser(navigationUsers[nextIndex]);
         return nextIndex;
       });
     },
-    [selectedUser, setSelectedUser, users]
+    [navigationUsers, selectedUser, setSelectedUser]
   );
 
   const openSelectedConversation = useCallback(() => {
-    if (!users.length) return;
-    const user = users[keyboardUserIndex] || users[0];
+    if (!navigationUsers.length) return;
+    const user = navigationUsers[keyboardUserIndex] || navigationUsers[0];
     if (user) {
       setSelectedUser(user);
     }
-  }, [keyboardUserIndex, setSelectedUser, users]);
+  }, [keyboardUserIndex, navigationUsers, setSelectedUser]);
 
   const handleSendShortcut = useCallback(() => {
     setSendShortcutSignal((prev) => prev + 1);
@@ -71,6 +112,8 @@ const HomePage = () => {
     setIsShortcutsOpen((prev) => !prev);
   }, []);
 
+  const isAnyOverlayOpen = isShortcutsOpen || isSidebarMenuOpen || isChatOverlayOpen;
+
   useKeyboardShortcuts({
     onFocusSearch: focusSearch,
     onEscape: handleEscape,
@@ -79,7 +122,41 @@ const HomePage = () => {
     onOpenConversation: openSelectedConversation,
     onSendShortcut: handleSendShortcut,
     onToggleCheatsheet: toggleCheatsheet,
+    isOverlayOpen: isAnyOverlayOpen,
   });
+
+  useEffect(() => {
+    if (!isShortcutsOpen) return;
+
+    const dialogElement = shortcutsDialogRef.current;
+    const triggerElement = shortcutsTriggerRef.current;
+    shortcutsCloseButtonRef.current?.focus();
+
+    const handleTabTrap = (event) => {
+      if (event.key !== "Tab") return;
+      const focusableItems = dialogElement?.querySelectorAll(
+        'button:not([disabled]), [href], input:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])'
+      );
+
+      if (!focusableItems?.length) return;
+      const firstFocusable = focusableItems[0];
+      const lastFocusable = focusableItems[focusableItems.length - 1];
+
+      if (event.shiftKey && document.activeElement === firstFocusable) {
+        event.preventDefault();
+        lastFocusable.focus();
+      } else if (!event.shiftKey && document.activeElement === lastFocusable) {
+        event.preventDefault();
+        firstFocusable.focus();
+      }
+    };
+
+    document.addEventListener("keydown", handleTabTrap);
+    return () => {
+      document.removeEventListener("keydown", handleTabTrap);
+      triggerElement?.focus();
+    };
+  }, [isShortcutsOpen]);
 
   return (
     <div className="w-full min-h-screen p-3 sm:p-6 lg:p-8 animate-fade-in">
@@ -93,37 +170,70 @@ const HomePage = () => {
         <Sidebar
           focusSearchSignal={focusSearchSignal}
           escapeSignal={escapeSignal}
-          keyboardUserId={users[keyboardUserIndex]?._id}
+          keyboardUserId={navigationUsers[keyboardUserIndex]?._id}
+          onFilteredUsersChange={(ids) => setKeyboardUserIds(ids)}
+          onMenuOpenChange={(open) => setIsSidebarMenuOpen(open)}
           onKeyboardUserHover={(userId) => {
-            const foundIndex = users.findIndex((user) => user._id === userId);
+            const foundIndex = navigationUsers.findIndex(
+              (user) => user._id === userId
+            );
             if (foundIndex >= 0) setKeyboardUserIndex(foundIndex);
           }}
         />
         <ChatContainer
           sendShortcutSignal={sendShortcutSignal}
           escapeSignal={escapeSignal}
+          onOverlayOpenChange={setIsChatOverlayOpen}
         />
         <RightSidebar />
       </div>
 
       <button
+        ref={shortcutsTriggerRef}
         type="button"
         onClick={() => setIsShortcutsOpen((prev) => !prev)}
-        className="fixed bottom-4 right-4 h-10 w-10 rounded-full glass-subtle border border-white/20 text-white/85 text-sm font-medium z-50"
+        className={`fixed right-4 h-11 w-11 rounded-full glass-subtle border border-white/20 text-white/85 text-sm font-medium z-50 ${
+          selectedUser
+            ? "bottom-[calc(6.8rem+env(safe-area-inset-bottom))] md:bottom-[max(1rem,env(safe-area-inset-bottom))]"
+            : "bottom-[max(1rem,env(safe-area-inset-bottom))]"
+        }`}
         aria-label="Open keyboard shortcuts"
+        aria-expanded={isShortcutsOpen}
+        aria-controls="keyboard-shortcuts-dialog"
       >
         ?
       </button>
 
       {isShortcutsOpen && (
-        <div className="fixed inset-0 z-50 bg-black/50 backdrop-blur-[2px] flex items-center justify-center p-4">
-          <div className="glass-panel rounded-2xl w-full max-w-md p-5 animate-slide-up">
+        <div
+          ref={shortcutsBackdropRef}
+          className="fixed inset-0 z-50 bg-black/50 backdrop-blur-[2px] flex items-center justify-center p-4"
+          onMouseDown={(event) => {
+            if (event.target === shortcutsBackdropRef.current) {
+              setIsShortcutsOpen(false);
+            }
+          }}
+        >
+          <div
+            id="keyboard-shortcuts-dialog"
+            ref={shortcutsDialogRef}
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="keyboard-shortcuts-title"
+            className="glass-panel rounded-2xl w-full max-w-md p-5 animate-slide-up"
+          >
             <div className="flex items-center justify-between gap-3 mb-3">
-              <h3 className="text-base font-semibold text-white">Shortcuts</h3>
+              <h3
+                id="keyboard-shortcuts-title"
+                className="text-base font-semibold text-white"
+              >
+                Shortcuts
+              </h3>
               <button
+                ref={shortcutsCloseButtonRef}
                 type="button"
                 onClick={() => setIsShortcutsOpen(false)}
-                className="h-8 w-8 rounded-lg bg-white/10 border border-white/15 text-white/70"
+                className="icon-btn h-8 w-8 rounded-lg text-white/70"
                 aria-label="Close shortcuts"
               >
                 ×
