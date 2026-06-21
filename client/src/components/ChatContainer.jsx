@@ -81,17 +81,21 @@ const ChatContainer = () => {
     }, 1200);
   };
 
+  const isSelectedUserTyping = selectedUser
+    ? Boolean(typingUsers[selectedUser._id])
+    : false;
+
   useEffect(() => {
     if (selectedUser) {
       getMessages(selectedUser._id);
     }
-  }, [selectedUser]);
+  }, [selectedUser, getMessages]);
 
   useEffect(() => {
-    if (scrollEnd.current && messages) {
-      scrollEnd.current.scrollIntoView({ behavior: "smooth" });
+    if (scrollEnd.current) {
+      scrollEnd.current.scrollIntoView({ behavior: "smooth", block: "end" });
     }
-  }, [messages]);
+  }, [messages, isSelectedUserTyping]);
 
   useEffect(
     () => () => {
@@ -100,13 +104,9 @@ const ChatContainer = () => {
     []
   );
 
-  const isSelectedUserTyping = selectedUser
-    ? Boolean(typingUsers[selectedUser._id])
-    : false;
-
   return selectedUser ? (
-    <div className="h-full relative bg-[linear-gradient(180deg,rgba(20,17,32,0.32),rgba(15,13,24,0.82))]">
-      <div className="sticky top-0 z-30 px-4 py-3 border-b border-white/10 glass-subtle">
+    <div className="h-full min-h-0 flex flex-col bg-[linear-gradient(180deg,rgba(20,17,32,0.32),rgba(15,13,24,0.82))]">
+      <div className="shrink-0 z-30 px-4 py-3 border-b border-white/10 glass-subtle">
         <div className="flex items-center gap-3">
           <div className="relative">
             <img
@@ -148,7 +148,7 @@ const ChatContainer = () => {
         </div>
       </div>
 
-      <div className="h-[calc(100%-164px)] overflow-y-auto px-4 py-4 pb-[8.5rem]">
+      <div className="flex-1 min-h-0 overflow-y-auto px-4 py-4">
         {messagesLoading && (
           <div className="space-y-3 pt-3">
             {Array.from({ length: 7 }).map((_, index) => (
@@ -169,7 +169,7 @@ const ChatContainer = () => {
             return (
               <div
                 key={msg._id || index}
-                className={`group flex mb-4 animate-message-in ${
+                className={`flex mb-4 animate-message-in ${
                   isOwnMessage ? "justify-end" : "justify-start"
                 }`}
               >
@@ -213,7 +213,7 @@ const ChatContainer = () => {
                       isOwnMessage ? "justify-end" : "justify-start"
                     }`}
                   >
-                    <span className="opacity-0 group-hover:opacity-100 transition-opacity">
+                    <span className="text-white/45">
                       {formatMessageTime(msg.createdAt)}
                     </span>
                     {isOwnMessage && (
@@ -261,7 +261,7 @@ const ChatContainer = () => {
         <div ref={scrollEnd} />
       </div>
 
-      <div className="absolute bottom-0 left-0 right-0 z-40 px-4 pb-4 pt-3 border-t border-white/10 bg-[linear-gradient(180deg,rgba(13,12,20,0.1),rgba(12,10,18,0.92))] backdrop-blur-xl">
+      <div className="shrink-0 z-40 px-4 pb-4 pt-3 border-t border-white/10 bg-[linear-gradient(180deg,rgba(13,12,20,0.1),rgba(12,10,18,0.92))] backdrop-blur-xl">
         {selectedImage && (
           <div className="mb-2.5 inline-flex items-center gap-2 rounded-xl px-2.5 py-2 bg-white/8 border border-white/14">
             <img

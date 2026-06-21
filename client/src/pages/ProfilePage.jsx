@@ -7,13 +7,18 @@ const ProfilePage = () => {
   const { authUser, updateProfile } = useContext(AuthContext);
 
   const [selectedImg, setSelectedImg] = useState(null);
-  const [name, setName] = useState(authUser.fullName);
-  const [bio, setBio] = useState(authUser.bio);
+  const [name, setName] = useState(authUser?.fullName ?? "");
+  const [bio, setBio] = useState(authUser?.bio ?? "");
   const [previewUrl, setPreviewUrl] = useState(
     authUser?.profilePic || assets.avatar_icon
   );
   const [isSaving, setIsSaving] = useState(false);
   const navigate = useNavigate();
+
+  useEffect(() => {
+    setName(authUser?.fullName ?? "");
+    setBio(authUser?.bio ?? "");
+  }, [authUser?.fullName, authUser?.bio]);
 
   useEffect(() => {
     if (!selectedImg) {

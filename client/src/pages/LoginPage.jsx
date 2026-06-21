@@ -57,6 +57,14 @@ const LoginPage = () => {
           onSubmit={onSubmitHandler}
           className="glass-panel rounded-3xl p-6 sm:p-7 lg:p-8 flex flex-col gap-5 min-h-[620px] animate-slide-up"
         >
+          <div className="lg:hidden flex items-center gap-3">
+            <img src={assets.logo} alt="quickchat logo" className="h-9" />
+            <div>
+              <p className="text-white text-sm font-medium">quickCHAT</p>
+              <p className="text-white/60 text-xs">Premium messaging</p>
+            </div>
+          </div>
+
           <div>
             <div className="flex items-center justify-between gap-3">
               <h2 className="font-semibold text-2xl text-white">{currState}</h2>
@@ -159,16 +167,18 @@ const LoginPage = () => {
             )}
           </div>
 
-          <label className="flex items-center gap-2 text-sm text-white/65">
-            <input
-              type="checkbox"
-              checked={agreed}
-              onChange={(e) => setAgreed(e.target.checked)}
-              className="h-4 w-4 rounded border-white/30 bg-white/10 accent-brand-400"
-              required
-            />
-            Agree to the terms of use and privacy policy
-          </label>
+          {currState === "Sign Up" && (
+            <label className="flex items-center gap-2 text-sm text-white/65">
+              <input
+                type="checkbox"
+                checked={agreed}
+                onChange={(e) => setAgreed(e.target.checked)}
+                className="h-4 w-4 rounded border-white/30 bg-white/10 accent-brand-400"
+                required
+              />
+              Agree to the terms of use and privacy policy
+            </label>
+          )}
 
           <button
             type="submit"

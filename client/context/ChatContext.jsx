@@ -1,7 +1,15 @@
-import { createContext, useContext, useEffect, useState } from "react";
+import {
+  createContext,
+  useCallback,
+  useContext,
+  useEffect,
+  useRef,
+  useState,
+} from "react";
 import { AuthContext } from "./AuthContext";
 import toast from "react-hot-toast";
 
+// eslint-disable-next-line react-refresh/only-export-components
 export const ChatContext = createContext();
 
 export const ChatProvider = ({ children }) => {
@@ -12,11 +20,15 @@ export const ChatProvider = ({ children }) => {
   const [usersLoading, setUsersLoading] = useState(false);
   const [messagesLoading, setMessagesLoading] = useState(false);
   const [typingUsers, setTypingUsers] = useState({});
+  const hasLoadedUsersRef = useRef(false);
 
   const { socket, axios } = useContext(AuthContext);
 
-  const getUsers = async () => {
-    setUsersLoading(true);
+  const getUsers = useCallback(async () => {
+    if (!hasLoadedUsersRef.current) {
+      setUsersLoading(true);
+    }
+
     try {
       const { data } = await axios.get("/api/messages/users");
       if (data.success) {
@@ -26,65 +38,80 @@ export const ChatProvider = ({ children }) => {
     } catch (error) {
       toast.error(error.message);
     } finally {
+      hasLoadedUsersRef.current = true;
       setUsersLoading(false);
     }
-  };
+  }, [axios]);
 
-  const getMessages = async (userId) => {
-    setMessagesLoading(true);
-    try {
-      const { data } = await axios.get(`/api/messages/${userId}`);
-      if (data.success) {
-        setMessages(data.messages);
-        setUnseenMessages((prev) => ({ ...prev, [userId]: 0 }));
+  const getMessages = useCallback(
+    async (userId) => {
+      setMessagesLoading(true);
+      setMessages([]);
 
-        const newlySeenMessageIds = data.messages
-          .filter((msg) => msg.senderId === userId && !msg.seen)
-          .map((msg) => msg._id);
+      try {
+        const { data } = await axios.get(`/api/messages/${userId}`);
+        if (data.success) {
+          setMessages(data.messages);
+          setUnseenMessages((prev) => ({ ...prev, [userId]: 0 }));
 
-        if (newlySeenMessageIds.length > 0 && socket) {
-          socket.emit("messagesSeen", {
-            to: userId,
-            messageIds: newlySeenMessageIds,
-          });
+          const newlySeenMessageIds = data.messages
+            .filter((msg) => msg.senderId === userId && !msg.seen)
+            .map((msg) => msg._id);
+
+          if (newlySeenMessageIds.length > 0 && socket) {
+            socket.emit("messagesSeen", {
+              to: userId,
+              messageIds: newlySeenMessageIds,
+            });
+          }
         }
+      } catch (error) {
+        toast.error(error.message);
+      } finally {
+        setMessagesLoading(false);
       }
-    } catch (error) {
-      toast.error(error.message);
-    } finally {
-      setMessagesLoading(false);
-    }
-  };
+    },
+    [axios, socket]
+  );
 
-  const sendMessage = async (messageData) => {
-    if (!selectedUser?._id) return;
+  const sendMessage = useCallback(
+    async (messageData) => {
+      if (!selectedUser?._id) return;
 
-    try {
-      const { data } = await axios.post(
-        `/api/messages/send/${selectedUser._id}`,
-        messageData
-      );
-      if (data.success) {
-        setMessages((prevMessages) => [...prevMessages, data.newMessage]);
-      } else {
-        toast.error(data.message);
+      try {
+        const { data } = await axios.post(
+          `/api/messages/send/${selectedUser._id}`,
+          messageData
+        );
+        if (data.success) {
+          setMessages((prevMessages) => [...prevMessages, data.newMessage]);
+        } else {
+          toast.error(data.message);
+        }
+      } catch (error) {
+        toast.error(error.message);
       }
-    } catch (error) {
-      toast.error(error.message);
-    }
-  };
+    },
+    [axios, selectedUser?._id]
+  );
 
-  const emitTyping = (receiverId) => {
-    if (!socket || !receiverId) return;
-    socket.emit("typing", { to: receiverId });
-  };
+  const emitTyping = useCallback(
+    (receiverId) => {
+      if (!socket || !receiverId) return;
+      socket.emit("typing", { to: receiverId });
+    },
+    [socket]
+  );
 
-  const emitStopTyping = (receiverId) => {
-    if (!socket || !receiverId) return;
-    socket.emit("stopTyping", { to: receiverId });
-  };
+  const emitStopTyping = useCallback(
+    (receiverId) => {
+      if (!socket || !receiverId) return;
+      socket.emit("stopTyping", { to: receiverId });
+    },
+    [socket]
+  );
 
-  const subscribeToMessages = () => {
+  const subscribeToMessages = useCallback(() => {
     if (!socket) return;
 
     socket.on("newMessage", async (newMessage) => {
@@ -151,21 +178,21 @@ export const ChatProvider = ({ children }) => {
         )
       );
     });
-  };
+  }, [axios, selectedUser, socket]);
 
-  const unsubscribeFromMessages = () => {
+  const unsubscribeFromMessages = useCallback(() => {
     if (!socket) return;
     socket.off("newMessage");
     socket.off("typing");
     socket.off("stopTyping");
     socket.off("messagesSeen");
-  };
+  }, [socket]);
 
   useEffect(() => {
     unsubscribeFromMessages();
     subscribeToMessages();
     return () => unsubscribeFromMessages();
-  }, [socket, selectedUser]);
+  }, [subscribeToMessages, unsubscribeFromMessages]);
 
   const value = {
     messages,
