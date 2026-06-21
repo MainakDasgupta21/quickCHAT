@@ -60,11 +60,11 @@ const MessageMenu = ({
       }
     };
 
-    document.addEventListener("mousedown", handleClickOutside);
+    document.addEventListener("pointerdown", handleClickOutside);
     document.addEventListener("keydown", handleEscape);
 
     return () => {
-      document.removeEventListener("mousedown", handleClickOutside);
+      document.removeEventListener("pointerdown", handleClickOutside);
       document.removeEventListener("keydown", handleEscape);
     };
   }, [onOpenChange, open]);
@@ -77,6 +77,8 @@ const MessageMenu = ({
         onClick={() => setOpen((prev) => !prev)}
         className="h-7 w-7 rounded-full text-xs text-white/60 hover:bg-white/10"
         aria-label="Message actions"
+        aria-haspopup="menu"
+        aria-expanded={open}
       >
         ⋯
       </button>

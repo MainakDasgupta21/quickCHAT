@@ -168,9 +168,10 @@ export const ChatProvider = ({ children }) => {
           return false;
         }
 
+        const normalizedMessageId = String(messageId);
         setMessages((prevMessages) =>
           prevMessages.map((message) =>
-            message._id === messageId
+            String(message._id) === normalizedMessageId
               ? { ...message, reactions: data.reactions }
               : message
           )
@@ -334,9 +335,10 @@ export const ChatProvider = ({ children }) => {
 
     socket.on("messageReaction", ({ messageId, reactions = [] }) => {
       if (!messageId) return;
+      const normalizedMessageId = String(messageId);
       setMessages((prevMessages) =>
         prevMessages.map((prevMessage) =>
-          prevMessage._id === messageId
+          String(prevMessage._id) === normalizedMessageId
             ? { ...prevMessage, reactions }
             : prevMessage
         )

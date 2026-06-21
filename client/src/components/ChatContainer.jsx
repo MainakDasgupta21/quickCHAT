@@ -639,7 +639,7 @@ const ChatContainer = ({
                       delete messageElementRefs.current[msg._id];
                     }
                   }}
-                  className={`group flex mb-4 animate-message-in ${
+                  className={`message-item group flex mb-4 animate-message-in ${
                     isOwnMessage ? "justify-end" : "justify-start"
                   }`}
                 >
@@ -743,10 +743,21 @@ const ChatContainer = ({
                   )}
 
                     {!msg.isDeleted && (
-                      <div className="mt-1 opacity-100 md:opacity-0 md:group-hover:opacity-100 md:focus-within:opacity-100 transition-opacity">
+                      <div
+                        className={`message-actions-row mt-1 ${
+                          openReactionPickerId === msg._id ||
+                          openMessageMenuId === msg._id
+                            ? "message-actions-row--open"
+                            : ""
+                        }`}
+                      >
                         <div className="flex items-center gap-1.5">
                           <ReactionBar
-                            onSelectEmoji={(emoji) => reactToMessage(msg._id, emoji)}
+                            onSelectEmoji={(emoji) => {
+                              reactToMessage(msg._id, emoji);
+                              setOpenReactionPickerId(null);
+                              setOpenMessageMenuId(null);
+                            }}
                             isPickerOpen={openReactionPickerId === msg._id}
                             onPickerOpenChange={(open) => {
                               setOpenReactionPickerId(open ? msg._id : null);
@@ -793,11 +804,19 @@ const ChatContainer = ({
                         <button
                           type="button"
                           key={`${msg._id}-${reaction.emoji}`}
-                          onClick={() => reactToMessage(msg._id, reaction.emoji)}
+                          onClick={() => {
+                            reactToMessage(msg._id, reaction.emoji);
+                            setOpenReactionPickerId(null);
+                            setOpenMessageMenuId(null);
+                          }}
                           className={`px-2 py-1 rounded-full text-xs border ${
                             reaction.mine
                               ? "bg-brand-500/35 border-brand-200/45 text-white"
                               : "bg-white/8 border-white/20 text-white/80"
+                          }`}
+                          aria-pressed={reaction.mine}
+                          aria-label={`${reaction.emoji} reaction, ${reaction.count} ${
+                            reaction.count === 1 ? "person" : "people"
                           }`}
                         >
                           {reaction.emoji} {reaction.count}

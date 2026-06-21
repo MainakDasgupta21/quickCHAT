@@ -273,6 +273,32 @@ body {
     color: rgba(236, 233, 255, 0.45);
   }
 
+  .message-actions-row {
+    opacity: 1;
+    pointer-events: auto;
+    transition: opacity var(--duration-base) var(--ease-standard);
+  }
+
+  @media (hover: hover) and (pointer: fine) {
+    .message-item .message-actions-row {
+      opacity: 0;
+      pointer-events: none;
+    }
+
+    .message-item:hover .message-actions-row,
+    .message-item .message-actions-row--open {
+      opacity: 1;
+      pointer-events: auto;
+    }
+  }
+
+  @media (hover: none), (pointer: coarse) {
+    .message-actions-row {
+      opacity: 1;
+      pointer-events: auto;
+    }
+  }
+
   .skeleton {
     border-radius: 0.75rem;
     background: linear-gradient(
