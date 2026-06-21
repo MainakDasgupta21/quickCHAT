@@ -66,6 +66,36 @@ io.on("connection", (socket) => {
                 }
         });
 
+        socket.on("messageUpdated", ({ to, message }) => {
+                if (!userId || !to || !message) return;
+                const receiverSocketId = userSocketMap[to];
+                if (receiverSocketId) {
+                        io.to(receiverSocketId).emit("messageUpdated", { message });
+                }
+        });
+
+        socket.on("messageDeleted", ({ to, messageId, message }) => {
+                if (!userId || !to || !messageId) return;
+                const receiverSocketId = userSocketMap[to];
+                if (receiverSocketId) {
+                        io.to(receiverSocketId).emit("messageDeleted", {
+                                messageId,
+                                message,
+                        });
+                }
+        });
+
+        socket.on("messageReaction", ({ to, messageId, reactions }) => {
+                if (!userId || !to || !messageId) return;
+                const receiverSocketId = userSocketMap[to];
+                if (receiverSocketId) {
+                        io.to(receiverSocketId).emit("messageReaction", {
+                                messageId,
+                                reactions: Array.isArray(reactions) ? reactions : [],
+                        });
+                }
+        });
+
         socket.on("disconnect", () => {
                 console.log("User Disconnected", userId);
                 delete userSocketMap[userId];

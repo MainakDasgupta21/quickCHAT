@@ -27,9 +27,15 @@
     radial-gradient(circle at 85% 18%, rgba(84, 153, 255, 0.22), transparent 36%),
     radial-gradient(circle at 50% 92%, rgba(139, 87, 255, 0.24), transparent 42%),
     #08070f;
+  --ease-standard: cubic-bezier(0.22, 1, 0.36, 1);
+  --ease-soft: cubic-bezier(0.2, 0.8, 0.2, 1);
+  --duration-fast: 140ms;
+  --duration-base: 230ms;
+  --duration-slow: 360ms;
   --animate-fade-in: fade-in 320ms ease-out;
   --animate-slide-up: slide-up 360ms ease-out;
   --animate-message-in: message-in 250ms ease-out;
+  --animate-stagger-in: stagger-in var(--duration-slow) var(--ease-standard) both;
   --animate-typing-bounce: typing-bounce 1.15s ease-in-out infinite;
   --animate-shimmer: shimmer 1.5s linear infinite;
   --animate-pulse-ring: pulse-ring 1.6s ease-out infinite;
@@ -63,6 +69,17 @@
   to {
     opacity: 1;
     transform: translateY(0) scale(1);
+  }
+}
+
+@keyframes stagger-in {
+  from {
+    opacity: 0;
+    transform: translateY(10px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
   }
 }
 
@@ -113,6 +130,10 @@ body,
   min-height: 100%;
 }
 
+html {
+  scroll-behavior: smooth;
+}
+
 body {
   margin: 0;
   background: var(--gradient-bg);
@@ -156,7 +177,13 @@ body {
   input,
   textarea,
   button {
-    @apply transition-all duration-200;
+    transition:
+      border-color var(--duration-base) var(--ease-standard),
+      background-color var(--duration-base) var(--ease-standard),
+      color var(--duration-base) var(--ease-standard),
+      transform var(--duration-fast) var(--ease-soft),
+      opacity var(--duration-base) var(--ease-standard),
+      box-shadow var(--duration-base) var(--ease-standard);
   }
 
   input:focus-visible,
@@ -208,5 +235,23 @@ body {
     );
     background-size: 200% 100%;
     animation: var(--animate-shimmer);
+  }
+
+  .stagger-item {
+    animation: var(--animate-stagger-in);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  html {
+    scroll-behavior: auto;
+  }
+
+  *,
+  *::before,
+  *::after {
+    animation-duration: 1ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 1ms !important;
   }
 }

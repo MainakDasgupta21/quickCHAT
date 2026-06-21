@@ -20,9 +20,11 @@ export const ChatProvider = ({ children }) => {
   const [usersLoading, setUsersLoading] = useState(false);
   const [messagesLoading, setMessagesLoading] = useState(false);
   const [typingUsers, setTypingUsers] = useState({});
+  const [replyTo, setReplyTo] = useState(null);
   const hasLoadedUsersRef = useRef(false);
 
-  const { socket, axios } = useContext(AuthContext);
+  const { socket, axios, showNotification, playReceiveCue, playSendCue } =
+    useContext(AuthContext);
 
   const getUsers = useCallback(async () => {
     if (!hasLoadedUsersRef.current) {
@@ -47,6 +49,7 @@ export const ChatProvider = ({ children }) => {
     async (userId) => {
       setMessagesLoading(true);
       setMessages([]);
+      setReplyTo(null);
 
       try {
         const { data } = await axios.get(`/api/messages/${userId}`);
@@ -85,6 +88,8 @@ export const ChatProvider = ({ children }) => {
         );
         if (data.success) {
           setMessages((prevMessages) => [...prevMessages, data.newMessage]);
+          setReplyTo(null);
+          playSendCue();
         } else {
           toast.error(data.message);
         }
@@ -92,7 +97,105 @@ export const ChatProvider = ({ children }) => {
         toast.error(error.message);
       }
     },
-    [axios, selectedUser?._id]
+    [axios, selectedUser?._id, playSendCue]
+  );
+
+  const editMessage = useCallback(
+    async (messageId, text) => {
+      try {
+        const { data } = await axios.put(`/api/messages/edit/${messageId}`, {
+          text,
+        });
+        if (!data.success) {
+          toast.error(data.message);
+          return false;
+        }
+
+        setMessages((prevMessages) =>
+          prevMessages.map((message) =>
+            message._id === messageId ? data.message : message
+          )
+        );
+        return true;
+      } catch (error) {
+        toast.error(error.message);
+        return false;
+      }
+    },
+    [axios]
+  );
+
+  const deleteMessage = useCallback(
+    async (messageId) => {
+      try {
+        const { data } = await axios.delete(`/api/messages/${messageId}`);
+        if (!data.success) {
+          toast.error(data.message);
+          return false;
+        }
+
+        setMessages((prevMessages) =>
+          prevMessages.map((message) =>
+            message._id === messageId ? data.message : message
+          )
+        );
+        return true;
+      } catch (error) {
+        toast.error(error.message);
+        return false;
+      }
+    },
+    [axios]
+  );
+
+  const reactToMessage = useCallback(
+    async (messageId, emoji) => {
+      try {
+        const { data } = await axios.post(`/api/messages/react/${messageId}`, {
+          emoji,
+        });
+        if (!data.success) {
+          toast.error(data.message);
+          return false;
+        }
+
+        setMessages((prevMessages) =>
+          prevMessages.map((message) =>
+            message._id === messageId
+              ? { ...message, reactions: data.reactions }
+              : message
+          )
+        );
+        return true;
+      } catch (error) {
+        toast.error(error.message);
+        return false;
+      }
+    },
+    [axios]
+  );
+
+  const searchMessages = useCallback(
+    async (userId, query) => {
+      const cleanedQuery = String(query || "").trim();
+      if (!cleanedQuery) return [];
+
+      try {
+        const { data } = await axios.get(`/api/messages/search/${userId}`, {
+          params: { q: cleanedQuery },
+        });
+
+        if (data.success) {
+          return data.messages || [];
+        }
+        toast.error(data.message);
+        return [];
+      } catch (error) {
+        toast.error(error.message);
+        return [];
+      }
+    },
+    [axios]
   );
 
   const emitTyping = useCallback(
@@ -125,6 +228,7 @@ export const ChatProvider = ({ children }) => {
       if (selectedUser && newMessage.senderId === selectedUser._id) {
         newMessage.seen = true;
         setMessages((prevMessages) => [...prevMessages, newMessage]);
+        playReceiveCue();
         try {
           await axios.put(`/api/messages/mark/${newMessage._id}`);
           socket.emit("messagesSeen", {
@@ -141,6 +245,21 @@ export const ChatProvider = ({ children }) => {
             ? prevUnseenMessages[newMessage.senderId] + 1
             : 1,
         }));
+
+        playReceiveCue();
+        const sender = users.find((user) => user._id === newMessage.senderId);
+        showNotification(sender?.fullName || "New message", {
+          body:
+            newMessage.text ||
+            (newMessage.image
+              ? "Sent a photo"
+              : newMessage.audio
+                ? "Sent a voice note"
+                : newMessage.file
+                  ? `Sent ${newMessage.file.name || "a file"}`
+                  : "Sent a message"),
+          icon: sender?.profilePic || undefined,
+        });
       }
     });
 
@@ -178,7 +297,38 @@ export const ChatProvider = ({ children }) => {
         )
       );
     });
-  }, [axios, selectedUser, socket]);
+
+    socket.on("messageUpdated", ({ message }) => {
+      if (!message?._id) return;
+      setMessages((prevMessages) =>
+        prevMessages.map((prevMessage) =>
+          prevMessage._id === message._id ? message : prevMessage
+        )
+      );
+    });
+
+    socket.on("messageDeleted", ({ messageId, message }) => {
+      if (!messageId) return;
+      setMessages((prevMessages) =>
+        prevMessages.map((prevMessage) =>
+          prevMessage._id === messageId
+            ? message || { ...prevMessage, isDeleted: true, text: "" }
+            : prevMessage
+        )
+      );
+    });
+
+    socket.on("messageReaction", ({ messageId, reactions = [] }) => {
+      if (!messageId) return;
+      setMessages((prevMessages) =>
+        prevMessages.map((prevMessage) =>
+          prevMessage._id === messageId
+            ? { ...prevMessage, reactions }
+            : prevMessage
+        )
+      );
+    });
+  }, [axios, playReceiveCue, selectedUser, showNotification, socket, users]);
 
   const unsubscribeFromMessages = useCallback(() => {
     if (!socket) return;
@@ -186,6 +336,9 @@ export const ChatProvider = ({ children }) => {
     socket.off("typing");
     socket.off("stopTyping");
     socket.off("messagesSeen");
+    socket.off("messageUpdated");
+    socket.off("messageDeleted");
+    socket.off("messageReaction");
   }, [socket]);
 
   useEffect(() => {
@@ -201,12 +354,18 @@ export const ChatProvider = ({ children }) => {
     getUsers,
     getMessages,
     sendMessage,
+    editMessage,
+    deleteMessage,
+    reactToMessage,
+    searchMessages,
     setSelectedUser,
     unseenMessages,
     setUnseenMessages,
     usersLoading,
     messagesLoading,
     typingUsers,
+    replyTo,
+    setReplyTo,
     emitTyping,
     emitStopTyping,
   };

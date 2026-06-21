@@ -1,10 +1,15 @@
-import React, { useContext, useEffect, useRef, useState } from "react";
+import React, { useContext, useEffect, useMemo, useRef, useState } from "react";
 import assets from "../assets/assets";
 import { useNavigate } from "react-router-dom";
 import { AuthContext } from "../../context/AuthContext";
 import { ChatContext } from "../../context/ChatContext";
 
-const Sidebar = () => {
+const Sidebar = ({
+  focusSearchSignal = 0,
+  escapeSignal = 0,
+  keyboardUserId,
+  onKeyboardUserHover,
+}) => {
   const {
     getUsers,
     users,
@@ -15,24 +20,52 @@ const Sidebar = () => {
     setUnseenMessages,
   } = useContext(ChatContext);
 
-  const { logout, onlineUsers } = useContext(AuthContext);
+  const {
+    logout,
+    onlineUsers,
+    soundEnabled,
+    toggleSound,
+    notificationPermission,
+    requestNotificationPermission,
+  } = useContext(AuthContext);
   const navigate = useNavigate();
   const [input, setInput] = useState("");
   const [menuOpen, setMenuOpen] = useState(false);
   const menuRef = useRef(null);
+  const searchInputRef = useRef(null);
+  const menuTriggerRef = useRef(null);
+  const hasFocusedMenuRef = useRef(false);
 
-  const filteredUsers = input
-    ? users.filter((user) =>
-        user.fullName.toLowerCase().includes(input.toLowerCase())
-      )
-    : users;
+  const filteredUsers = useMemo(() => {
+    if (!input.trim()) return users;
+    const lowered = input.toLowerCase();
+    return users.filter((user) => {
+      const nameMatch = user.fullName.toLowerCase().includes(lowered);
+      const lastMessageMatch = user.lastMessagePreview
+        ?.toLowerCase()
+        .includes(lowered);
+      return nameMatch || lastMessageMatch;
+    });
+  }, [input, users]);
 
   useEffect(() => {
     getUsers();
   }, [onlineUsers, getUsers]);
 
   useEffect(() => {
+    if (!focusSearchSignal) return;
+    searchInputRef.current?.focus();
+    searchInputRef.current?.select();
+  }, [focusSearchSignal]);
+
+  useEffect(() => {
+    if (!escapeSignal) return;
+    setMenuOpen(false);
+  }, [escapeSignal]);
+
+  useEffect(() => {
     if (!menuOpen) return;
+    hasFocusedMenuRef.current = false;
 
     const handleClickOutside = (event) => {
       if (menuRef.current && !menuRef.current.contains(event.target)) {
@@ -46,13 +79,45 @@ const Sidebar = () => {
       }
     };
 
+    const handleTabLock = (event) => {
+      if (event.key !== "Tab") return;
+      const focusableItems = menuRef.current?.querySelectorAll(
+        'button:not([disabled]), [href], [tabindex]:not([tabindex="-1"])'
+      );
+      if (!focusableItems?.length) return;
+
+      const first = focusableItems[0];
+      const last = focusableItems[focusableItems.length - 1];
+
+      if (event.shiftKey && document.activeElement === first) {
+        event.preventDefault();
+        last.focus();
+      } else if (!event.shiftKey && document.activeElement === last) {
+        event.preventDefault();
+        first.focus();
+      }
+    };
+
+    const triggerElement = menuTriggerRef.current;
+    document.addEventListener("keydown", handleTabLock);
     document.addEventListener("mousedown", handleClickOutside);
     document.addEventListener("keydown", handleEscape);
 
     return () => {
+      document.removeEventListener("keydown", handleTabLock);
       document.removeEventListener("mousedown", handleClickOutside);
       document.removeEventListener("keydown", handleEscape);
+      triggerElement?.focus();
     };
+  }, [menuOpen]);
+
+  useEffect(() => {
+    if (!menuOpen || hasFocusedMenuRef.current) return;
+    const firstFocusable = menuRef.current?.querySelector("button");
+    if (firstFocusable) {
+      firstFocusable.focus();
+      hasFocusedMenuRef.current = true;
+    }
   }, [menuOpen]);
 
   return (
@@ -64,15 +129,23 @@ const Sidebar = () => {
       <div className="pb-5 border-b border-white/10">
         <div className="flex justify-between items-center gap-3">
           <div>
-            <img src={assets.logo} alt="logo" className="max-w-36 sm:max-w-40" />
+            <img
+              src={assets.logo}
+              alt="quickCHAT logo"
+              className="max-w-36 sm:max-w-40"
+            />
             <p className="text-[11px] sm:text-xs text-white/60 mt-2">
               Instant conversations, elevated.
             </p>
           </div>
-          <div className="relative" ref={menuRef}>
+          <div className="relative" ref={menuRef} aria-live="polite">
             <button
+              ref={menuTriggerRef}
               type="button"
               onClick={() => setMenuOpen((prev) => !prev)}
+              aria-haspopup="menu"
+              aria-expanded={menuOpen}
+              aria-controls="sidebar-actions-menu"
               className="h-10 w-10 rounded-xl glass-subtle border border-white/15 flex items-center justify-center hover:border-white/30"
             >
               <img
@@ -82,9 +155,14 @@ const Sidebar = () => {
               />
             </button>
             {menuOpen && (
-              <div className="absolute top-12 right-0 z-20 w-40 p-2 rounded-xl glass-panel animate-slide-up">
+              <div
+                id="sidebar-actions-menu"
+                role="menu"
+                className="absolute top-12 right-0 z-20 w-52 p-2 rounded-xl glass-panel animate-slide-up"
+              >
                 <button
                   type="button"
+                  role="menuitem"
                   onClick={() => {
                     setMenuOpen(false);
                     navigate("/profile");
@@ -96,6 +174,35 @@ const Sidebar = () => {
                 </button>
                 <button
                   type="button"
+                  role="menuitem"
+                  onClick={() => toggleSound()}
+                  className="w-full text-left px-3 py-2 rounded-lg text-sm hover:bg-white/10 flex items-center justify-between gap-2"
+                >
+                  <span className="flex items-center gap-2">
+                    <span className="h-2 w-2 rounded-full bg-brand-300" />
+                    Sound
+                  </span>
+                  <span className="text-xs text-white/60">
+                    {soundEnabled ? "On" : "Off"}
+                  </span>
+                </button>
+                <button
+                  type="button"
+                  role="menuitem"
+                  onClick={() => requestNotificationPermission()}
+                  className="w-full text-left px-3 py-2 rounded-lg text-sm hover:bg-white/10 flex items-center justify-between gap-2"
+                >
+                  <span className="flex items-center gap-2">
+                    <span className="h-2 w-2 rounded-full bg-brand-300" />
+                    Notifications
+                  </span>
+                  <span className="text-xs text-white/60">
+                    {notificationPermission}
+                  </span>
+                </button>
+                <button
+                  type="button"
+                  role="menuitem"
                   onClick={() => {
                     setMenuOpen(false);
                     logout();
@@ -112,10 +219,15 @@ const Sidebar = () => {
         <div className="glass-subtle rounded-2xl flex items-center gap-2 py-3 px-4 mt-5 border border-white/10 focus-within:border-brand-300/55 focus-within:shadow-[0_0_0_3px_rgba(154,125,255,0.15)]">
           <img
             src={assets.search_icon}
-            alt="search-icon"
+            alt=""
             className="w-3 opacity-75"
           />
+          <label htmlFor="conversation-search" className="sr-only">
+            Search conversations
+          </label>
           <input
+            id="conversation-search"
+            ref={searchInputRef}
             value={input}
             onChange={(e) => setInput(e.target.value)}
             type="text"
@@ -134,7 +246,7 @@ const Sidebar = () => {
         </div>
       </div>
 
-      <div className="mt-4 space-y-1">
+      <div className="mt-4 space-y-1" role="listbox" aria-label="Conversations">
         {usersLoading &&
           Array.from({ length: 7 }).map((_, index) => (
             <div key={index} className="flex items-center gap-3 px-2 py-3">
@@ -156,7 +268,7 @@ const Sidebar = () => {
         )}
 
         {!usersLoading &&
-          filteredUsers.map((user) => {
+          filteredUsers.map((user, index) => {
             const isOnline = onlineUsers.includes(user._id);
             const isActive = selectedUser?._id === user._id;
 
@@ -164,20 +276,25 @@ const Sidebar = () => {
               <button
                 type="button"
                 key={user._id}
+                role="option"
+                aria-selected={isActive}
                 onClick={() => {
                   setSelectedUser(user);
                   setUnseenMessages((prev) => ({ ...prev, [user._id]: 0 }));
                 }}
+                onMouseEnter={() => onKeyboardUserHover?.(user._id)}
+                onFocus={() => onKeyboardUserHover?.(user._id)}
+                style={{ animationDelay: `${index * 28}ms` }}
                 className={`w-full relative flex items-center gap-3 p-2.5 pr-3 rounded-2xl cursor-pointer text-left transition-all duration-200 border ${
                   isActive
                     ? "bg-white/10 border-brand-300/40 shadow-soft"
                     : "border-transparent hover:bg-white/7 hover:border-white/10"
-                }`}
+                } ${keyboardUserId === user._id && !isActive ? "border-brand-300/25 bg-white/[0.04]" : ""} stagger-item`}
               >
                 <div className="relative">
                   <img
                     src={user?.profilePic || assets.avatar_icon}
-                    alt="avatar-icon"
+                    alt={`${user.fullName} profile`}
                     className="w-11 h-11 rounded-full object-cover border border-white/20"
                   />
                   {isOnline && (
@@ -192,7 +309,11 @@ const Sidebar = () => {
                     {user.fullName}
                   </p>
                   <p className="text-xs text-white/55 truncate mt-0.5">
-                    {isOnline ? "Online now" : "Last seen recently"}
+                    {input.trim()
+                      ? user.lastMessagePreview || (isOnline ? "Online now" : "Last seen recently")
+                      : isOnline
+                        ? "Online now"
+                        : user.lastMessagePreview || "Last seen recently"}
                   </p>
                 </div>
                 {unseenMessages[user._id] > 0 && (

@@ -2,6 +2,7 @@ import { createContext, useCallback, useEffect, useState } from "react";
 import axios from "axios";
 import toast from "react-hot-toast";
 import { io } from "socket.io-client";
+import { playReceiveSound, playSendSound } from "../src/lib/sound";
 
 // eslint-disable-next-line react-refresh/only-export-components
 export const AuthContext = createContext();
@@ -13,15 +14,83 @@ export const AuthProvider = ({ children }) => {
   const [authUser, setAuthUser] = useState(null);
   const [onlineUsers, setOnlineUsers] = useState([]);
   const [socket, setSocket] = useState(null);
+  const [connectionStatus, setConnectionStatus] = useState("disconnected");
+  const [soundEnabled, setSoundEnabled] = useState(() => {
+    const storedValue = localStorage.getItem("quickchat-sound-enabled");
+    if (storedValue === null) return true;
+    return storedValue === "true";
+  });
+  const [notificationPermission, setNotificationPermission] = useState(() => {
+    if (typeof window === "undefined" || !("Notification" in window)) {
+      return "unsupported";
+    }
+    return Notification.permission;
+  });
+
+  const toggleSound = useCallback(() => {
+    setSoundEnabled((prevSoundEnabled) => !prevSoundEnabled);
+  }, []);
+
+  useEffect(() => {
+    localStorage.setItem("quickchat-sound-enabled", String(soundEnabled));
+  }, [soundEnabled]);
+
+  const requestNotificationPermission = useCallback(async () => {
+    if (typeof window === "undefined" || !("Notification" in window)) {
+      toast.error("Browser notifications are not supported.");
+      return "unsupported";
+    }
+
+    const permission = await Notification.requestPermission();
+    setNotificationPermission(permission);
+
+    if (permission === "granted") {
+      toast.success("Notifications enabled");
+    } else {
+      toast.error("Notification permission denied");
+    }
+
+    return permission;
+  }, []);
+
+  const showNotification = useCallback(
+    (title, options = {}) => {
+      if (
+        typeof window === "undefined" ||
+        !("Notification" in window) ||
+        notificationPermission !== "granted" ||
+        !document.hidden
+      ) {
+        return;
+      }
+
+      new Notification(title, options);
+    },
+    [notificationPermission]
+  );
+
+  const playSendCue = useCallback(() => {
+    if (soundEnabled) {
+      playSendSound();
+    }
+  }, [soundEnabled]);
+
+  const playReceiveCue = useCallback(() => {
+    if (soundEnabled) {
+      playReceiveSound();
+    }
+  }, [soundEnabled]);
 
   //connect socket func to handle socket connection and online users updates
   const connectSocket = useCallback(
     (userData) => {
       if (!userData) return;
+      setConnectionStatus("connecting");
 
       setSocket((previousSocket) => {
         const existingUserId = previousSocket?.io?.opts?.query?.userId;
         if (previousSocket?.connected && existingUserId === userData._id) {
+          setConnectionStatus("connected");
           return previousSocket;
         }
 
@@ -31,6 +100,21 @@ export const AuthProvider = ({ children }) => {
           query: {
             userId: userData._id,
           },
+          reconnection: true,
+          reconnectionAttempts: 8,
+          reconnectionDelay: 800,
+        });
+
+        newSocket.on("connect", () => {
+          setConnectionStatus("connected");
+        });
+
+        newSocket.on("disconnect", () => {
+          setConnectionStatus("disconnected");
+        });
+
+        newSocket.on("connect_error", () => {
+          setConnectionStatus("disconnected");
         });
 
         newSocket.connect();
@@ -53,7 +137,9 @@ export const AuthProvider = ({ children }) => {
         connectSocket(data.user);
       }
     } catch (error) {
-      toast.error(error.response?.data?.message || error.message);
+      if (error.response?.status !== 401) {
+        toast.error(error.response?.data?.message || error.message);
+      }
     }
   }, [connectSocket]);
 
@@ -82,10 +168,11 @@ export const AuthProvider = ({ children }) => {
     setToken(null);
     setAuthUser(null);
     setOnlineUsers([]);
-    axios.defaults.headers.common["token"] = null;
+    delete axios.defaults.headers.common["token"];
     toast.success("Logout successfully");
     socket?.disconnect();
     setSocket(null);
+    setConnectionStatus("disconnected");
   };
 
   //update user profile
@@ -104,9 +191,23 @@ export const AuthProvider = ({ children }) => {
   useEffect(() => {
     if (token) {
       axios.defaults.headers.common["token"] = token;
+      checkAuth();
+    } else {
+      delete axios.defaults.headers.common["token"];
+      setAuthUser(null);
+      setOnlineUsers([]);
+      setConnectionStatus("disconnected");
+      setSocket((existingSocket) => {
+        existingSocket?.disconnect();
+        return null;
+      });
     }
-    checkAuth();
   }, [token, checkAuth]);
+
+  useEffect(() => {
+    if (typeof window === "undefined" || !("Notification" in window)) return;
+    setNotificationPermission(Notification.permission);
+  }, []);
 
   const value = {
     axios,
@@ -118,6 +219,14 @@ export const AuthProvider = ({ children }) => {
     setOnlineUsers,
     socket,
     setSocket,
+    connectionStatus,
+    soundEnabled,
+    toggleSound,
+    notificationPermission,
+    requestNotificationPermission,
+    showNotification,
+    playSendCue,
+    playReceiveCue,
     login,
     logout,
     updateProfile,
