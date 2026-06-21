@@ -39,6 +39,33 @@ io.on("connection", (socket) => {
         io.emit("getOnlineUsers", Object.keys(userSocketMap))
 
 
+        socket.on("typing", ({ to }) => {
+                if (!userId || !to) return;
+                const receiverSocketId = userSocketMap[to];
+                if (receiverSocketId) {
+                        io.to(receiverSocketId).emit("typing", { from: userId });
+                }
+        });
+
+        socket.on("stopTyping", ({ to }) => {
+                if (!userId || !to) return;
+                const receiverSocketId = userSocketMap[to];
+                if (receiverSocketId) {
+                        io.to(receiverSocketId).emit("stopTyping", { from: userId });
+                }
+        });
+
+        socket.on("messagesSeen", ({ to, messageIds }) => {
+                if (!userId || !to) return;
+                const receiverSocketId = userSocketMap[to];
+                if (receiverSocketId) {
+                        io.to(receiverSocketId).emit("messagesSeen", {
+                                from: userId,
+                                messageIds: Array.isArray(messageIds) ? messageIds : [],
+                        });
+                }
+        });
+
         socket.on("disconnect", () => {
                 console.log("User Disconnected", userId);
                 delete userSocketMap[userId];

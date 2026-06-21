@@ -6,55 +6,89 @@ import { AuthContext } from "../../context/AuthContext";
 const RightSidebar = () => {
   const { selectedUser, messages } = useContext(ChatContext);
   const { logout, onlineUsers } = useContext(AuthContext);
-  const  [msgImages , setMsgImages] = useState([]);
+  const [msgImages, setMsgImages] = useState([]);
 
-
-  //get all images from the messages and set them to state
-  useEffect(()=>{
-    setMsgImages(
-      messages.filter(msg => msg.image).map((msg) => msg.image)
-    )
-  }, [messages])
-
-
+  useEffect(() => {
+    setMsgImages(messages.filter((msg) => msg.image).map((msg) => msg.image));
+  }, [messages]);
 
   return (
     selectedUser && (
       <div
-        className={`bg-[#8185B2]/10 text-white w-full relative overflow-y-scroll ${
+        className={`w-full h-full text-white border-l border-white/10 bg-[linear-gradient(180deg,rgba(129,133,178,0.12),rgba(15,13,24,0.8))] overflow-y-auto ${
           selectedUser ? "max-md:hidden" : ""
         }`}
       >
-        <div className="pt-16 flex flex-col items-center gap-2 text-xs font-light mx-auto">
-          <img
-            src={selectedUser?.profilePic || assets.avatar_icon}
-            alt=""
-            className="w-20 aspect-[1/1] rounded-full"
-          />
-          <h1 className="px-10 text-xl font-medium mx-auto flex items-center gap-2">
-            {onlineUsers.includes(selectedUser._id) && <p className="w-2 h-2 rounded-full bg-green-500"></p>}
-            {selectedUser.fullName} 
-          </h1>
-          <p className="px-10 mx-auto">{selectedUser.bio}</p>
-        </div>
-        <hr className="border-[#ffffff50] my-4" />
-        <div className="px-5 text-xs">
-          <p>Media</p>
-          <div className="mt-2 max-h-[200px] overflow-y-scroll grid grid-cols-2 gap-4 opacity-80">
-            {msgImages.map((url, index) => (
-              <div
-                key={index}
-                onClick={() => window.open(url)}
-                className="cursor-pointer rounded"
-              >
-                <img src={url} alt="" className="h-full rounded-md" />
+        <div className="p-5 lg:p-6 pb-6">
+          <div className="glass-panel rounded-3xl p-5 text-center animate-slide-up">
+            <div className="relative w-fit mx-auto">
+              <div className="h-24 w-24 rounded-full p-[2px] bg-[linear-gradient(135deg,#a786ff,#5f47e6)]">
+                <img
+                  src={selectedUser?.profilePic || assets.avatar_icon}
+                  alt=""
+                  className="h-full w-full rounded-full object-cover border border-white/15"
+                />
               </div>
-            ))}
+              {onlineUsers.includes(selectedUser._id) && (
+                <>
+                  <span className="absolute right-1 bottom-1 h-3.5 w-3.5 rounded-full bg-success border-2 border-surface-900" />
+                  <span className="absolute right-1 bottom-1 h-3.5 w-3.5 rounded-full bg-success/80 animate-pulse-ring" />
+                </>
+              )}
+            </div>
+
+            <h1 className="mt-4 text-xl font-semibold tracking-wide">
+              {selectedUser.fullName}
+            </h1>
+            <p className="text-xs text-white/60 mt-1">
+              {onlineUsers.includes(selectedUser._id)
+                ? "Online and available"
+                : "Offline right now"}
+            </p>
+            <div className="mt-4 text-sm text-white/80 bg-white/6 border border-white/12 rounded-2xl p-3">
+              {selectedUser.bio || "No bio available yet."}
+            </div>
+          </div>
+
+          <div className="mt-6">
+            <div className="flex items-center justify-between mb-3">
+              <p className="text-sm font-medium tracking-wide">Shared Media</p>
+              <span className="text-xs text-white/55">{msgImages.length} items</span>
+            </div>
+
+            {msgImages.length > 0 ? (
+              <div className="grid grid-cols-2 gap-3">
+                {msgImages.map((url, index) => (
+                  <button
+                    type="button"
+                    key={index}
+                    onClick={() => window.open(url, "_blank")}
+                    className="group aspect-square rounded-2xl overflow-hidden border border-white/14 bg-white/6"
+                  >
+                    <img
+                      src={url}
+                      alt=""
+                      className="h-full w-full object-cover transition-transform duration-300 group-hover:scale-110"
+                    />
+                  </button>
+                ))}
+              </div>
+            ) : (
+              <div className="rounded-2xl border border-dashed border-white/15 bg-white/5 p-6 text-center text-sm text-white/65">
+                Media from this conversation will appear here.
+              </div>
+            )}
+          </div>
+
+          <div className="sticky bottom-0 pt-6 pb-2 bg-gradient-to-t from-surface-900/85 to-transparent">
+            <button
+              onClick={() => logout()}
+              className="w-full btn-gradient text-sm font-medium py-3 rounded-2xl cursor-pointer"
+            >
+              Logout
+            </button>
           </div>
         </div>
-        <button onClick={()=>logout()} className="absolute bottom-5 left-1/2 transform -translate-x-1/2 bg-gradient-to-r from-purple-400 to-violet-600 text-white border-none text-sm font-light py-2 px-20 rounded-full cursor-pointer">
-          Logout
-        </button>
       </div>
     )
   );
