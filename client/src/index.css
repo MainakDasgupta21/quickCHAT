@@ -285,7 +285,7 @@ body {
       pointer-events: none;
     }
 
-    .message-item:hover .message-actions-row,
+    .message-bubble:hover .message-actions-row,
     .message-item .message-actions-row--open {
       opacity: 1;
       pointer-events: auto;

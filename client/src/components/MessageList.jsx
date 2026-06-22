@@ -124,7 +124,7 @@ const MessageRow = React.memo(function MessageRow({
         }`}
       >
         <div
-          className={`max-w-[78%] flex flex-col ${
+          className={`message-bubble max-w-[78%] flex flex-col ${
             isOwn ? "items-end" : "items-start"
           }`}
         >
