@@ -62,4 +62,45 @@ export function createClientId() {
   return `client-${Date.now()}-${randomPart}`;
 }
 
+const formatTimeForLastSeen = (date) =>
+  date.toLocaleTimeString("en-US", {
+    hour: "2-digit",
+    minute: "2-digit",
+    hour12: false,
+  });
+
+export function formatLastSeen(lastSeenValue, fallback = "Last seen recently") {
+  if (!lastSeenValue) return fallback;
+
+  const lastSeen = new Date(lastSeenValue);
+  if (Number.isNaN(lastSeen.getTime())) return fallback;
+
+  const now = new Date();
+  const diffMs = now.getTime() - lastSeen.getTime();
+  if (diffMs <= 0 || diffMs < 60 * 1000) {
+    return "Last seen just now";
+  }
+
+  const diffMinutes = Math.floor(diffMs / (60 * 1000));
+  if (diffMinutes < 60) {
+    return `Last seen ${diffMinutes}m ago`;
+  }
+
+  const diffHours = Math.floor(diffMinutes / 60);
+  if (now.toDateString() === lastSeen.toDateString()) {
+    return `Last seen ${diffHours}h ago`;
+  }
+
+  const yesterday = new Date(now);
+  yesterday.setDate(now.getDate() - 1);
+  if (yesterday.toDateString() === lastSeen.toDateString()) {
+    return `Last seen yesterday at ${formatTimeForLastSeen(lastSeen)}`;
+  }
+
+  return `Last seen ${lastSeen.toLocaleDateString("en-US", {
+    month: "short",
+    day: "numeric",
+  })} at ${formatTimeForLastSeen(lastSeen)}`;
+}
+
 export const MAX_IMAGE_UPLOAD_BYTES = 5 * 1024 * 1024; // 5MB raw (~6.85MB once base64-encoded)

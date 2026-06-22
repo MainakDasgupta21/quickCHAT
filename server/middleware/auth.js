@@ -1,11 +1,12 @@
 import User from "../models/User.js";
 import jwt from "jsonwebtoken";
+import { getTokenFromRequest } from "../lib/utils.js";
 
 
 //middleware to protect the routes
 export const protectRoute = async (req , res , next) => {
         try{
-                const token = req.headers.token;
+                const token = getTokenFromRequest(req);
                 if(!token){
                         return res.status(401).json({success:false , message:"Not authorized, no token"});
                 }

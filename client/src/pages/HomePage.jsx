@@ -13,7 +13,8 @@ import { ChatContext } from "../../context/ChatContext";
 import { useKeyboardShortcuts } from "../hooks/useKeyboardShortcuts";
 
 const HomePage = () => {
-  const { selectedUser, setSelectedUser, users } = useContext(ChatContext);
+  const { selectedConversation, setSelectedConversation, conversations } =
+    useContext(ChatContext);
   const [focusSearchSignal, setFocusSearchSignal] = useState(0);
   const [escapeSignal, setEscapeSignal] = useState(0);
   const [sendShortcutSignal, setSendShortcutSignal] = useState(0);
@@ -27,34 +28,38 @@ const HomePage = () => {
   const shortcutsCloseButtonRef = useRef(null);
   const shortcutsTriggerRef = useRef(null);
 
-  const navigationUsers = useMemo(() => {
-    if (!users.length) return [];
-    if (!keyboardUserIds.length) return users;
+  const navigationConversations = useMemo(() => {
+    if (!conversations.length) return [];
+    if (!keyboardUserIds.length) return conversations;
 
-    const userMap = new Map(users.map((user) => [user._id, user]));
-    return keyboardUserIds.map((id) => userMap.get(id)).filter(Boolean);
-  }, [keyboardUserIds, users]);
+    const conversationMap = new Map(
+      conversations.map((conversation) => [conversation._id, conversation])
+    );
+    return keyboardUserIds
+      .map((id) => conversationMap.get(id))
+      .filter(Boolean);
+  }, [conversations, keyboardUserIds]);
 
   useEffect(() => {
-    if (!navigationUsers.length) {
+    if (!navigationConversations.length) {
       setKeyboardUserIndex(0);
       return;
     }
 
-    if (!selectedUser) {
+    if (!selectedConversation) {
       setKeyboardUserIndex((prevIndex) =>
-        prevIndex < navigationUsers.length ? prevIndex : 0
+        prevIndex < navigationConversations.length ? prevIndex : 0
       );
       return;
     }
 
-    const selectedIndex = navigationUsers.findIndex(
-      (user) => user._id === selectedUser._id
+    const selectedIndex = navigationConversations.findIndex(
+      (conversation) => conversation._id === selectedConversation._id
     );
     if (selectedIndex >= 0) {
       setKeyboardUserIndex(selectedIndex);
     }
-  }, [navigationUsers, selectedUser]);
+  }, [navigationConversations, selectedConversation]);
 
   const focusSearch = useCallback(() => {
     setFocusSearchSignal((prev) => prev + 1);
@@ -71,38 +76,47 @@ const HomePage = () => {
       return;
     }
 
-    if (selectedUser) {
-      setSelectedUser(null);
+    if (selectedConversation) {
+      setSelectedConversation(null);
     }
-  }, [isChatOverlayOpen, isShortcutsOpen, isSidebarMenuOpen, selectedUser, setSelectedUser]);
+  }, [
+    isChatOverlayOpen,
+    isShortcutsOpen,
+    isSidebarMenuOpen,
+    selectedConversation,
+    setSelectedConversation,
+  ]);
 
   const moveSelection = useCallback(
     (direction) => {
-      if (!navigationUsers.length) return;
+      if (!navigationConversations.length) return;
       setKeyboardUserIndex((prevIndex) => {
         const baseIndex =
-          selectedUser && prevIndex < navigationUsers.length
+          selectedConversation && prevIndex < navigationConversations.length
             ? prevIndex
-            : navigationUsers.findIndex((user) => user._id === selectedUser?._id);
+            : navigationConversations.findIndex(
+                (conversation) => conversation._id === selectedConversation?._id
+              );
 
         const normalizedIndex = baseIndex >= 0 ? baseIndex : 0;
         const nextIndex =
-          (normalizedIndex + direction + navigationUsers.length) %
-          navigationUsers.length;
-        setSelectedUser(navigationUsers[nextIndex]);
+          (normalizedIndex + direction + navigationConversations.length) %
+          navigationConversations.length;
+        setSelectedConversation(navigationConversations[nextIndex]);
         return nextIndex;
       });
     },
-    [navigationUsers, selectedUser, setSelectedUser]
+    [navigationConversations, selectedConversation, setSelectedConversation]
   );
 
   const openSelectedConversation = useCallback(() => {
-    if (!navigationUsers.length) return;
-    const user = navigationUsers[keyboardUserIndex] || navigationUsers[0];
-    if (user) {
-      setSelectedUser(user);
+    if (!navigationConversations.length) return;
+    const conversation =
+      navigationConversations[keyboardUserIndex] || navigationConversations[0];
+    if (conversation) {
+      setSelectedConversation(conversation);
     }
-  }, [keyboardUserIndex, navigationUsers, setSelectedUser]);
+  }, [keyboardUserIndex, navigationConversations, setSelectedConversation]);
 
   // Stable, identity-guarded callbacks for Sidebar. Passing inline arrows here
   // previously re-created these on every HomePage render; because Sidebar runs
@@ -128,13 +142,13 @@ const HomePage = () => {
   }, []);
 
   const handleKeyboardUserHover = useCallback(
-    (userId) => {
-      const foundIndex = navigationUsers.findIndex(
-        (user) => user._id === userId
+    (conversationId) => {
+      const foundIndex = navigationConversations.findIndex(
+        (conversation) => conversation._id === conversationId
       );
       if (foundIndex >= 0) setKeyboardUserIndex(foundIndex);
     },
-    [navigationUsers]
+    [navigationConversations]
   );
 
   const handleSendShortcut = useCallback(() => {
@@ -195,7 +209,7 @@ const HomePage = () => {
     <div className="w-full min-h-screen p-3 sm:p-6 lg:p-8 animate-fade-in">
       <div
         className={`glass-panel mx-auto h-[calc(100vh-1.5rem)] sm:h-[calc(100vh-3rem)] lg:h-[calc(100vh-4rem)] max-w-[1500px] rounded-[28px] overflow-hidden grid grid-cols-1 relative transition-all duration-300 ${
-          selectedUser
+          selectedConversation
             ? "md:grid-cols-[300px_minmax(0,1fr)_320px] 2xl:grid-cols-[340px_minmax(0,1fr)_360px]"
             : "md:grid-cols-[360px_minmax(0,1fr)]"
         }`}
@@ -203,7 +217,7 @@ const HomePage = () => {
         <Sidebar
           focusSearchSignal={focusSearchSignal}
           escapeSignal={escapeSignal}
-          keyboardUserId={navigationUsers[keyboardUserIndex]?._id}
+          keyboardUserId={navigationConversations[keyboardUserIndex]?._id}
           onFilteredUsersChange={handleFilteredUsersChange}
           onMenuOpenChange={handleSidebarMenuOpenChange}
           onKeyboardUserHover={handleKeyboardUserHover}
@@ -221,7 +235,7 @@ const HomePage = () => {
         type="button"
         onClick={() => setIsShortcutsOpen((prev) => !prev)}
         className={`fixed right-4 h-11 w-11 rounded-full glass-subtle border border-white/20 text-white/85 text-sm font-medium z-50 ${
-          selectedUser
+          selectedConversation
             ? "bottom-[calc(6.8rem+env(safe-area-inset-bottom))] md:bottom-[max(1rem,env(safe-area-inset-bottom))]"
             : "bottom-[max(1rem,env(safe-area-inset-bottom))]"
         }`}

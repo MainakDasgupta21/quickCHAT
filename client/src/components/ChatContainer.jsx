@@ -9,7 +9,14 @@ import React, {
   useState,
 } from "react";
 import assets from "../assets/assets";
-import { MAX_IMAGE_UPLOAD_BYTES, formatFileSize } from "../lib/utils";
+import { MAX_IMAGE_UPLOAD_BYTES, formatFileSize, formatLastSeen } from "../lib/utils";
+import {
+  getConversationAvatar,
+  getConversationPeerId,
+  getConversationTitle,
+  isDirectConversation,
+  toNormalizedId,
+} from "../lib/conversations";
 import { ChatContext } from "../../context/ChatContext";
 import { AuthContext } from "../../context/AuthContext";
 import toast from "react-hot-toast";
@@ -25,11 +32,14 @@ const ChatContainer = ({
 }) => {
   const {
     messages,
-    selectedUser,
-    setSelectedUser,
+    selectedConversation,
+    setSelectedConversation,
     sendMessage,
     getMessages,
+    loadOlderMessages = async () => false,
     messagesLoading = false,
+    loadingOlderMessages = false,
+    hasMoreMessages = false,
     typingUsers = {},
     emitTyping = () => {},
     emitStopTyping = () => {},
@@ -43,12 +53,14 @@ const ChatContainer = ({
     searchMessages,
   } = useContext(ChatContext);
   const { authUser, onlineUsers } = useContext(AuthContext);
-  const scrollContainerRef = useRef(null);
-  const scrollEnd = useRef();
+  const virtuosoRef = useRef(null);
   const typingTimeoutRef = useRef(null);
   const typingRef = useRef(false);
   const previousMessageCountRef = useRef(0);
+  const previousTailMessageIdRef = useRef(null);
   const messageElementRefs = useRef({});
+  const messageIndexByIdRef = useRef(new Map());
+  const hasMoreMessagesRef = useRef(false);
   const mediaRecorderRef = useRef(null);
   const audioStreamRef = useRef(null);
   const recordingIntervalRef = useRef(null);
@@ -73,6 +85,15 @@ const ChatContainer = ({
   const [openMessageMenuId, setOpenMessageMenuId] = useState(null);
   const [openReactionPickerId, setOpenReactionPickerId] = useState(null);
   const [isMobileDetailsOpen, setIsMobileDetailsOpen] = useState(false);
+
+  const selectedConversationId = toNormalizedId(selectedConversation?._id);
+  const selectedConversationPeerId = getConversationPeerId(selectedConversation);
+  const selectedConversationTitle = getConversationTitle(selectedConversation);
+  const selectedConversationAvatar = getConversationAvatar(selectedConversation);
+  const isDirectSelectedConversation = isDirectConversation(selectedConversation);
+  const isDirectPeerOnline = Boolean(
+    selectedConversationPeerId && onlineUsers.includes(selectedConversationPeerId)
+  );
 
   const processFileInput = async (file, mode = "auto") => {
     if (!file) return;
@@ -157,11 +178,17 @@ const ChatContainer = ({
     }
   };
 
-  const scrollToBottom = (behavior = "smooth") => {
-    if (scrollEnd.current) {
-      scrollEnd.current.scrollIntoView({ behavior, block: "end" });
-    }
-  };
+  const scrollToBottom = useCallback(
+    (behavior = "smooth") => {
+      if (!messages.length) return;
+      virtuosoRef.current?.scrollToIndex({
+        index: messages.length - 1,
+        align: "end",
+        behavior,
+      });
+    },
+    [messages.length]
+  );
 
   const handleSendMessage = async (event) => {
     event?.preventDefault?.();
@@ -208,8 +235,8 @@ const ChatContainer = ({
     setIsNearBottom(true);
     scrollToBottom();
 
-    if (typingRef.current && selectedUser) {
-      emitStopTyping(selectedUser._id);
+    if (typingRef.current && selectedConversation) {
+      emitStopTyping(selectedConversation);
       typingRef.current = false;
     }
   };
@@ -229,10 +256,10 @@ const ChatContainer = ({
     const value = e.target.value;
     setInput(value);
 
-    if (!selectedUser) return;
+    if (!selectedConversation) return;
     if (!value.trim()) {
       if (typingRef.current) {
-        emitStopTyping(selectedUser._id);
+        emitStopTyping(selectedConversation);
         typingRef.current = false;
       }
       clearTimeout(typingTimeoutRef.current);
@@ -240,77 +267,147 @@ const ChatContainer = ({
     }
 
     if (!typingRef.current) {
-      emitTyping(selectedUser._id);
+      emitTyping(selectedConversation);
       typingRef.current = true;
     }
 
     clearTimeout(typingTimeoutRef.current);
     typingTimeoutRef.current = setTimeout(() => {
-      emitStopTyping(selectedUser._id);
+      emitStopTyping(selectedConversation);
       typingRef.current = false;
     }, 1200);
   };
 
-  const isSelectedUserTyping = selectedUser
-    ? Boolean(typingUsers[selectedUser._id])
-    : false;
+  const activeTypingParticipantNames = useMemo(() => {
+    if (!selectedConversationId) return [];
+    const typingInConversation = typingUsers[selectedConversationId] || {};
+    const typingIds = Object.keys(typingInConversation).filter(
+      (participantId) => participantId !== toNormalizedId(authUser?._id)
+    );
+    if (!typingIds.length) return [];
+
+    const participantNameMap = new Map(
+      (selectedConversation?.participants || []).map((participant) => [
+        toNormalizedId(participant._id),
+        participant.fullName || "Someone",
+      ])
+    );
+    return typingIds.map((participantId) => participantNameMap.get(participantId) || "Someone");
+  }, [authUser?._id, selectedConversation?.participants, selectedConversationId, typingUsers]);
+
+  const isSelectedConversationTyping = activeTypingParticipantNames.length > 0;
+
+  const isMessageReadByCurrentUser = useCallback(
+    (message) => {
+      if (message?.seen) return true;
+      return Array.isArray(message?.readBy)
+        ? message.readBy.some(
+            (readReceipt) =>
+              toNormalizedId(readReceipt?.userId) === toNormalizedId(authUser?._id)
+          )
+        : false;
+    },
+    [authUser?._id]
+  );
 
   const firstUnreadIndex = useMemo(
     () =>
-      messages.findIndex(
-        (message) =>
-          message.senderId === selectedUser?._id && !message.seen && !message.isDeleted
-      ),
-    [messages, selectedUser?._id]
+      messages.findIndex((message) => {
+        const senderId = toNormalizedId(message.senderId);
+        return (
+          senderId !== toNormalizedId(authUser?._id) &&
+          !isMessageReadByCurrentUser(message) &&
+          !message.isDeleted
+        );
+      }),
+    [authUser?._id, isMessageReadByCurrentUser, messages]
   );
 
   const searchMatchIds = useMemo(
     () => searchMatches.map((message) => message._id),
     [searchMatches]
   );
+  const messageIndexById = useMemo(() => {
+    const indexById = new Map();
+    messages.forEach((message, index) => {
+      indexById.set(String(message._id), index);
+    });
+    return indexById;
+  }, [messages]);
 
   useEffect(() => {
-    if (selectedUser) {
-      getMessages(selectedUser._id);
+    messageIndexByIdRef.current = messageIndexById;
+  }, [messageIndexById]);
+
+  useEffect(() => {
+    hasMoreMessagesRef.current = hasMoreMessages;
+  }, [hasMoreMessages]);
+
+  useEffect(() => {
+    if (selectedConversation) {
+      getMessages(selectedConversation._id);
       setShowSearch(false);
       setSearchQuery("");
       setSearchMatches([]);
       setActiveSearchMatchIndex(0);
       setPendingBelowCount(0);
       setIsNearBottom(true);
+      previousMessageCountRef.current = 0;
+      previousTailMessageIdRef.current = null;
       setOpenMessageMenuId(null);
       setOpenReactionPickerId(null);
       setShowComposerEmoji(false);
       setIsMobileDetailsOpen(false);
     }
-  }, [selectedUser, getMessages]);
+  }, [selectedConversation, getMessages]);
 
   useEffect(() => {
-    if (!selectedUser) return;
+    if (!selectedConversation) return;
 
     if (isNearBottom) {
       scrollToBottom();
     }
-  }, [messages, isSelectedUserTyping, isNearBottom, selectedUser]);
+  }, [
+    messages,
+    isNearBottom,
+    isSelectedConversationTyping,
+    scrollToBottom,
+    selectedConversation,
+  ]);
 
   useEffect(() => {
     if (!messages.length) {
       previousMessageCountRef.current = 0;
+      previousTailMessageIdRef.current = null;
       return;
     }
 
     const previousCount = previousMessageCountRef.current;
-    if (messages.length > previousCount && !isNearBottom) {
-      const newlyArrived = messages.slice(previousCount);
+    const previousTailMessageId = previousTailMessageIdRef.current;
+    const currentTailMessage = messages[messages.length - 1];
+    const currentTailMessageId = String(
+      currentTailMessage?._id || currentTailMessage?.clientId || ""
+    );
+    const appendedCount =
+      messages.length > previousCount && currentTailMessageId !== previousTailMessageId
+        ? messages.length - previousCount
+        : 0;
+
+    if (appendedCount > 0 && !isNearBottom) {
+      const newlyArrived = messages.slice(-appendedCount);
       const incomingCount = newlyArrived.filter(
-        (message) => message.senderId === selectedUser?._id
+        (message) =>
+          String(message.senderId?._id || message.senderId || "") !==
+          String(authUser?._id || "")
       ).length;
       if (incomingCount > 0) {
         setPendingBelowCount((prev) => prev + incomingCount);
       }
     }
+
     previousMessageCountRef.current = messages.length;
-  }, [messages, isNearBottom, selectedUser?._id]);
+    previousTailMessageIdRef.current = currentTailMessageId;
+  }, [authUser?._id, messages, isNearBottom]);
 
   useEffect(
     () => () => {
@@ -369,7 +466,7 @@ const ChatContainer = ({
   }, [showComposerEmoji]);
 
   useEffect(() => {
-    if (!selectedUser?._id || !searchQuery.trim()) {
+    if (!selectedConversation?._id || !searchQuery.trim()) {
       setSearchMatches([]);
       setActiveSearchMatchIndex(0);
       return;
@@ -377,20 +474,35 @@ const ChatContainer = ({
 
     clearTimeout(searchTimeoutRef.current);
     searchTimeoutRef.current = setTimeout(async () => {
-      const matches = await searchMessages(selectedUser._id, searchQuery);
+      const matches = await searchMessages(selectedConversation._id, searchQuery);
       setSearchMatches(matches);
       setActiveSearchMatchIndex(0);
     }, 260);
 
     return () => clearTimeout(searchTimeoutRef.current);
-  }, [searchMessages, searchQuery, selectedUser?._id]);
+  }, [searchMessages, searchQuery, selectedConversation?._id]);
 
   useEffect(() => {
     if (!searchMatchIds.length) return;
-    const activeId = searchMatchIds[activeSearchMatchIndex];
-    const activeElement = messageElementRefs.current[activeId];
-    activeElement?.scrollIntoView({ behavior: "smooth", block: "center" });
-  }, [activeSearchMatchIndex, searchMatchIds]);
+    let isCancelled = false;
+
+    const scrollToActiveSearchMatch = async () => {
+      const activeId = searchMatchIds[activeSearchMatchIndex];
+      const targetIndex = await ensureMessageLoaded(activeId);
+      if (isCancelled || targetIndex < 0) return;
+
+      virtuosoRef.current?.scrollToIndex({
+        index: targetIndex,
+        align: "center",
+        behavior: "smooth",
+      });
+    };
+
+    void scrollToActiveSearchMatch();
+    return () => {
+      isCancelled = true;
+    };
+  }, [activeSearchMatchIndex, ensureMessageLoaded, searchMatchIds]);
 
   // Stable handlers passed to the memoized MessageList. Keeping their identity
   // constant lets MessageRow's React.memo skip re-rendering untouched messages.
@@ -457,6 +569,60 @@ const ChatContainer = ({
     if (open) setOpenMessageMenuId(null);
   }, []);
 
+  const handleStartReached = useCallback(() => {
+    if (messagesLoading || loadingOlderMessages || !hasMoreMessages) return;
+    void loadOlderMessages();
+  }, [hasMoreMessages, loadOlderMessages, loadingOlderMessages, messagesLoading]);
+
+  const handleAtBottomStateChange = useCallback((atBottom) => {
+    const nearBottom = Boolean(atBottom);
+    setIsNearBottom(nearBottom);
+    if (nearBottom) {
+      setPendingBelowCount(0);
+    }
+  }, []);
+
+  const ensureMessageLoaded = useCallback(
+    async (messageId) => {
+      const normalizedMessageId = String(messageId || "");
+      if (!normalizedMessageId) return -1;
+
+      const existingIndex = messageIndexByIdRef.current.get(normalizedMessageId);
+      if (typeof existingIndex === "number") {
+        return existingIndex;
+      }
+
+      let attempts = 0;
+      while (hasMoreMessagesRef.current && attempts < 50) {
+        const didLoadOlder = await loadOlderMessages();
+        attempts += 1;
+
+        const loadedIndex = messageIndexByIdRef.current.get(normalizedMessageId);
+        if (typeof loadedIndex === "number") {
+          return loadedIndex;
+        }
+        if (!didLoadOlder) break;
+      }
+
+      return -1;
+    },
+    [loadOlderMessages]
+  );
+
+  const handleJumpToMessage = useCallback(
+    async (messageId) => {
+      const targetIndex = await ensureMessageLoaded(messageId);
+      if (targetIndex < 0) return;
+
+      virtuosoRef.current?.scrollToIndex({
+        index: targetIndex,
+        align: "center",
+        behavior: "smooth",
+      });
+    },
+    [ensureMessageLoaded]
+  );
+
   const activeSearchMatchId = searchMatchIds[activeSearchMatchIndex];
   const hasInteractiveOverlayOpen =
     showComposerEmoji ||
@@ -470,20 +636,43 @@ const ChatContainer = ({
     return () => onOverlayOpenChange(false);
   }, [hasInteractiveOverlayOpen, onOverlayOpenChange]);
 
-  return selectedUser ? (
+  const typingIndicator = !messagesLoading && isSelectedConversationTyping && (
+    <div className="flex justify-start mb-4 animate-fade-in px-1">
+      <div className="px-3 py-2.5 rounded-2xl rounded-bl-sm bg-white/8 border border-white/16 backdrop-blur-sm flex items-center gap-1.5">
+        <span className="h-1.5 w-1.5 rounded-full bg-brand-200 animate-typing-bounce" />
+        <span
+          className="h-1.5 w-1.5 rounded-full bg-brand-200 animate-typing-bounce"
+          style={{ animationDelay: "120ms" }}
+        />
+        <span
+          className="h-1.5 w-1.5 rounded-full bg-brand-200 animate-typing-bounce"
+          style={{ animationDelay: "240ms" }}
+        />
+        {activeTypingParticipantNames.length > 0 && (
+          <span className="ml-1.5 text-[11px] text-white/65">
+            {activeTypingParticipantNames.length === 1
+              ? `${activeTypingParticipantNames[0]} is typing`
+              : `${activeTypingParticipantNames.length} people are typing`}
+          </span>
+        )}
+      </div>
+    </div>
+  );
+
+  return selectedConversation ? (
     <div className="h-full min-h-0 flex flex-col bg-[linear-gradient(180deg,rgba(20,17,32,0.32),rgba(15,13,24,0.82))] relative">
       <div className="shrink-0 z-30 px-4 py-3 border-b border-white/10 glass-subtle">
         <div className="flex items-center gap-3">
           <div className="relative">
             <img
-              src={selectedUser.profilePic || assets.avatar_icon}
-              alt={`${selectedUser.fullName} profile`}
+              src={selectedConversationAvatar || assets.avatar_icon}
+              alt={`${selectedConversationTitle} profile`}
               decoding="async"
               width="40"
               height="40"
               className="w-10 h-10 rounded-full object-cover border border-white/20"
             />
-            {onlineUsers.includes(selectedUser._id) && (
+            {isDirectSelectedConversation && isDirectPeerOnline && (
               <>
                 <span className="absolute -bottom-0.5 -right-0.5 h-3.5 w-3.5 rounded-full bg-success border-2 border-surface-900" />
                 <span className="absolute -bottom-0.5 -right-0.5 h-3.5 w-3.5 rounded-full bg-success/80 animate-pulse-ring" />
@@ -492,17 +681,19 @@ const ChatContainer = ({
           </div>
           <div className="flex-1 min-w-0">
             <p className="text-base font-medium text-white truncate">
-              {selectedUser.fullName}
+              {selectedConversationTitle}
             </p>
             <p className="text-xs text-white/60 mt-0.5">
-              {onlineUsers.includes(selectedUser._id)
-                ? "Active now"
-                : "Currently offline"}
+              {isDirectSelectedConversation
+                ? isDirectPeerOnline
+                  ? "Active now"
+                  : formatLastSeen(selectedConversation?.peer?.lastSeen)
+                : `${Math.max((selectedConversation?.participants || []).length - 1, 0)} members`}
             </p>
           </div>
           <button
             type="button"
-            onClick={() => setSelectedUser(null)}
+            onClick={() => setSelectedConversation(null)}
             className="md:hidden icon-btn h-9 w-9"
             aria-label="Back to conversation list"
           >
@@ -525,7 +716,7 @@ const ChatContainer = ({
             type="button"
             onClick={() => setIsMobileDetailsOpen(true)}
             className="md:hidden icon-btn h-9 w-9"
-            aria-label="Open contact details"
+            aria-label="Open conversation details"
           >
             <img src={assets.help_icon} alt="" className="w-4" />
           </button>
@@ -587,24 +778,7 @@ const ChatContainer = ({
         )}
       </div>
 
-      <div
-        ref={scrollContainerRef}
-        onScroll={(event) => {
-          const target = event.currentTarget;
-          const distanceFromBottom =
-            target.scrollHeight - (target.scrollTop + target.clientHeight);
-          const nearBottom = distanceFromBottom < 100;
-          setIsNearBottom(nearBottom);
-          if (nearBottom) {
-            setPendingBelowCount(0);
-          }
-        }}
-        className="flex-1 min-h-0 overflow-y-auto px-4 py-4"
-        role="log"
-        aria-live="polite"
-        aria-relevant="additions text"
-        aria-label={`Messages with ${selectedUser.fullName}`}
-      >
+      <div className="flex-1 min-h-0 px-4 py-4">
         {messagesLoading && (
           <div className="space-y-3 pt-3">
             {Array.from({ length: 7 }).map((_, index) => (
@@ -618,10 +792,13 @@ const ChatContainer = ({
           </div>
         )}
 
-        {!messagesLoading && (
+        {!messagesLoading && messages.length > 0 && (
           <MessageList
+            virtuosoRef={virtuosoRef}
             messages={messages}
             authUserId={authUser._id}
+            conversationType={selectedConversation?.type}
+            participants={selectedConversation?.participants || []}
             firstUnreadIndex={firstUnreadIndex}
             searchMatchIds={searchMatchIds}
             activeSearchMatchId={activeSearchMatchId}
@@ -636,29 +813,18 @@ const ChatContainer = ({
             onDelete={handleDelete}
             onRetry={handleRetry}
             onDiscard={handleDiscard}
+            onJumpToMessage={handleJumpToMessage}
             onOpenMenuChange={handleOpenMenuChange}
             onOpenReactionChange={handleOpenReactionChange}
+            onStartReached={handleStartReached}
+            onAtBottomStateChange={handleAtBottomStateChange}
+            footer={typingIndicator}
+            ariaLabel={`Messages in ${selectedConversationTitle}`}
           />
         )}
 
-        {!messagesLoading && isSelectedUserTyping && (
-          <div className="flex justify-start mb-4 animate-fade-in">
-            <div className="px-3 py-2.5 rounded-2xl rounded-bl-sm bg-white/8 border border-white/16 backdrop-blur-sm flex items-center gap-1.5">
-              <span className="h-1.5 w-1.5 rounded-full bg-brand-200 animate-typing-bounce" />
-              <span
-                className="h-1.5 w-1.5 rounded-full bg-brand-200 animate-typing-bounce"
-                style={{ animationDelay: "120ms" }}
-              />
-              <span
-                className="h-1.5 w-1.5 rounded-full bg-brand-200 animate-typing-bounce"
-                style={{ animationDelay: "240ms" }}
-              />
-            </div>
-          </div>
-        )}
-
-        {!messagesLoading && messages.length === 0 && (
-          <div className="h-full min-h-60 flex flex-col items-center justify-center text-center text-white/55">
+        {!messagesLoading && messages.length === 0 && !isSelectedConversationTyping && (
+          <div className="h-full min-h-60 flex flex-col items-center justify-center text-center text-white/55 overflow-y-auto">
             <img src={assets.logo_icon} alt="" className="w-12 opacity-80 mb-3" />
             <p className="text-white/85 font-medium">No messages yet</p>
             <p className="text-sm mt-1">
@@ -667,7 +833,9 @@ const ChatContainer = ({
           </div>
         )}
 
-        <div ref={scrollEnd} />
+        {!messagesLoading && messages.length === 0 && isSelectedConversationTyping && (
+          <div className="h-full overflow-y-auto flex items-end">{typingIndicator}</div>
+        )}
       </div>
 
       {!isNearBottom && (

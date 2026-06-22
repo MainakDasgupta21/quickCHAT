@@ -4,6 +4,8 @@ import {
   formatFileSize,
   formatMessageTime,
 } from "../lib/utils";
+import { isGroupConversation, toNormalizedId } from "../lib/conversations";
+import { Virtuoso } from "react-virtuoso";
 import ReactionBar from "./ReactionBar";
 import MessageMenu from "./MessageMenu";
 import AudioMessage from "./AudioMessage";
@@ -94,8 +96,11 @@ const MessageRow = React.memo(function MessageRow({
   onDelete,
   onRetry,
   onDiscard,
+  onJumpToMessage,
   onOpenMenuChange,
   onOpenReactionChange,
+  senderName,
+  showSenderLabel,
 }) {
   const reactionGroups = useMemo(
     () => groupReactions(message.reactions, authUserId),
@@ -143,6 +148,12 @@ const MessageRow = React.memo(function MessageRow({
             isOwn ? "items-end" : "items-start"
           }`}
         >
+            {showSenderLabel && !isOwn && (
+              <p className="mb-1 px-1 text-[11px] tracking-wide text-brand-100/80">
+                {senderName || "Member"}
+              </p>
+            )}
+
           <div
             className={`message-content relative flex flex-col ${
               isOwn
@@ -155,12 +166,7 @@ const MessageRow = React.memo(function MessageRow({
                 type="button"
                 onClick={() => {
                   if (message.replyTo?._id) {
-                    messageElementRefs.current[
-                      message.replyTo._id
-                    ]?.scrollIntoView({
-                      behavior: "smooth",
-                      block: "center",
-                    });
+                    onJumpToMessage?.(message.replyTo._id);
                   }
                 }}
                 className={`mb-1 text-left text-xs px-3 py-2 rounded-xl border ${
@@ -390,50 +396,90 @@ const MessageList = React.memo(function MessageList({
   onDelete,
   onRetry,
   onDiscard,
+  onJumpToMessage,
   onOpenMenuChange,
   onOpenReactionChange,
+  virtuosoRef,
+  onStartReached,
+  onAtBottomStateChange,
+  footer,
+  ariaLabel = "Messages",
+  conversationType = "direct",
+  participants = [],
 }) {
   const searchMatchSet = useMemo(
     () => new Set(searchMatchIds.map((messageId) => String(messageId))),
     [searchMatchIds]
   );
   const highlightQuery = searchMatchSet.size ? searchQuery : "";
+  const participantNameMap = useMemo(
+    () =>
+      new Map(
+        participants.map((participant) => [
+          toNormalizedId(participant._id),
+          participant.fullName || "Member",
+        ])
+      ),
+    [participants]
+  );
+  const showSenderLabel = isGroupConversation({ type: conversationType });
 
-  return messages.map((message, index) => {
-    const messageId = String(message._id);
-    const senderId = String(message.senderId?._id || message.senderId || "");
-    const previousMessage = messages[index - 1];
-    const showDayDivider =
-      !previousMessage ||
-      new Date(previousMessage.createdAt).toDateString() !==
-        new Date(message.createdAt).toDateString();
+  return (
+    <Virtuoso
+      ref={virtuosoRef}
+      style={{ height: "100%" }}
+      data={messages}
+      overscan={320}
+      followOutput={false}
+      computeItemKey={(index, message) =>
+        message?.clientId || message?._id || `message-${index}`
+      }
+      startReached={onStartReached}
+      atBottomStateChange={onAtBottomStateChange}
+      aria-label={ariaLabel}
+      components={{
+        Footer: () => footer || null,
+      }}
+      itemContent={(index, message) => {
+        const messageId = String(message._id);
+        const senderId = String(message.senderId?._id || message.senderId || "");
+        const senderName = participantNameMap.get(toNormalizedId(senderId)) || "Member";
+        const previousMessage = messages[index - 1];
+        const showDayDivider =
+          !previousMessage ||
+          new Date(previousMessage.createdAt).toDateString() !==
+            new Date(message.createdAt).toDateString();
 
-    return (
-      <MessageRow
-        key={message.clientId || message._id || index}
-        message={message}
-        authUserId={authUserId}
-        isOwn={senderId === String(authUserId)}
-        showDayDivider={showDayDivider}
-        showUnreadDivider={firstUnreadIndex === index}
-        isSearchMatch={searchMatchSet.has(messageId)}
-        isActiveSearchMatch={String(activeSearchMatchId || "") === messageId}
-        isMenuOpen={openMessageMenuId === message._id}
-        isReactionOpen={openReactionPickerId === message._id}
-        highlightQuery={highlightQuery}
-        closeSignal={closeSignal}
-        messageElementRefs={messageElementRefs}
-        onReact={onReact}
-        onReply={onReply}
-        onStartEdit={onStartEdit}
-        onDelete={onDelete}
-        onRetry={onRetry}
-        onDiscard={onDiscard}
-        onOpenMenuChange={onOpenMenuChange}
-        onOpenReactionChange={onOpenReactionChange}
-      />
-    );
-  });
+        return (
+          <MessageRow
+            message={message}
+            authUserId={authUserId}
+            isOwn={senderId === String(authUserId)}
+            senderName={senderName}
+            showSenderLabel={showSenderLabel}
+            showDayDivider={showDayDivider}
+            showUnreadDivider={firstUnreadIndex === index}
+            isSearchMatch={searchMatchSet.has(messageId)}
+            isActiveSearchMatch={String(activeSearchMatchId || "") === messageId}
+            isMenuOpen={openMessageMenuId === message._id}
+            isReactionOpen={openReactionPickerId === message._id}
+            highlightQuery={highlightQuery}
+            closeSignal={closeSignal}
+            messageElementRefs={messageElementRefs}
+            onReact={onReact}
+            onReply={onReply}
+            onStartEdit={onStartEdit}
+            onDelete={onDelete}
+            onRetry={onRetry}
+            onDiscard={onDiscard}
+            onJumpToMessage={onJumpToMessage}
+            onOpenMenuChange={onOpenMenuChange}
+            onOpenReactionChange={onOpenReactionChange}
+          />
+        );
+      }}
+    />
+  );
 });
 
 export default MessageList;

@@ -1,4 +1,4 @@
-import { generateToken } from "../lib/utils.js";
+import { clearAuthCookie, generateToken, setAuthCookie } from "../lib/utils.js";
 import User from "../models/User.js";
 import bcrypt from 'bcryptjs'
 import cloudinary from "../lib/cloudinary.js"
@@ -37,6 +37,7 @@ export const Signup = async (req, res) => {
                 })
 
                 const token = generateToken(newUser._id)
+                setAuthCookie(res, token);
 
                 res.json({ success: true, userData: sanitizeUser(newUser), token, message: "Account created successfully" })
 
@@ -61,6 +62,7 @@ export const login = async (req, res) => {
                 }
 
                 const token = generateToken(userData._id)
+                setAuthCookie(res, token);
                 res.json({ success: true, userData: sanitizeUser(userData), token, message: "Login successful" })
         } catch (error) {
                 console.log(error.message)
@@ -71,6 +73,11 @@ export const login = async (req, res) => {
 //controller to check if user is authenticated
 export const checkAuth = (req, res) => {
         res.json({ success: true, user: req.user });
+}
+
+export const logout = (req, res) => {
+        clearAuthCookie(res);
+        res.json({ success: true, message: "Logout successful" });
 }
 
 //controller to update user profile details

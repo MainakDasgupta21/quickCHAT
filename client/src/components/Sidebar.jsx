@@ -1,8 +1,20 @@
 import React, { useContext, useEffect, useMemo, useRef, useState } from "react";
-import assets from "../assets/assets";
 import { useNavigate } from "react-router-dom";
+import toast from "react-hot-toast";
+import assets from "../assets/assets";
 import { AuthContext } from "../../context/AuthContext";
 import { ChatContext } from "../../context/ChatContext";
+import CreateGroupModal from "./CreateGroupModal";
+import {
+  getConversationAvatar,
+  getConversationPeerId,
+  getConversationSearchText,
+  getConversationTitle,
+  isDirectConversation,
+  isGroupConversation,
+  toNormalizedId,
+} from "../lib/conversations";
+import { formatLastSeen } from "../lib/utils";
 
 const Sidebar = ({
   focusSearchSignal = 0,
@@ -13,13 +25,16 @@ const Sidebar = ({
   onKeyboardUserHover,
 }) => {
   const {
-    getUsers,
-    users,
-    usersLoading = false,
-    selectedUser,
-    setSelectedUser,
+    getConversations,
+    conversations,
+    contacts,
+    getContacts,
+    selectedConversation,
+    setSelectedConversation,
     unseenMessages,
     setUnseenMessages,
+    usersLoading = false,
+    createGroupConversation,
   } = useContext(ChatContext);
 
   const {
@@ -31,61 +46,65 @@ const Sidebar = ({
     notificationPermission,
     requestNotificationPermission,
   } = useContext(AuthContext);
+
   const navigate = useNavigate();
   const [input, setInput] = useState("");
   const [menuOpen, setMenuOpen] = useState(false);
+  const [isCreateGroupOpen, setIsCreateGroupOpen] = useState(false);
+  const [isCreatingGroup, setIsCreatingGroup] = useState(false);
   const menuRef = useRef(null);
   const searchInputRef = useRef(null);
   const menuTriggerRef = useRef(null);
   const hasFocusedMenuRef = useRef(false);
-  const hasFetchedUsersRef = useRef(false);
+  const hasFetchedConversationsRef = useRef(false);
   const knownUserIdsRef = useRef(new Set());
 
-  const filteredUsers = useMemo(() => {
-    if (!input.trim()) return users;
+  const filteredConversations = useMemo(() => {
+    if (!input.trim()) return conversations;
     const lowered = input.toLowerCase();
-    return users.filter((user) => {
-      const nameMatch = user.fullName.toLowerCase().includes(lowered);
-      const lastMessageMatch = user.lastMessagePreview
-        ?.toLowerCase()
-        .includes(lowered);
-      return nameMatch || lastMessageMatch;
+    return conversations.filter((conversation) =>
+      getConversationSearchText(conversation).toLowerCase().includes(lowered)
+    );
+  }, [conversations, input]);
+
+  useEffect(() => {
+    const knownUserIds = new Set();
+    conversations.forEach((conversation) => {
+      const peerId = getConversationPeerId(conversation);
+      if (peerId) knownUserIds.add(peerId);
+      (conversation.participants || []).forEach((participant) => {
+        const participantId = toNormalizedId(participant._id);
+        if (participantId) knownUserIds.add(participantId);
+      });
     });
-  }, [input, users]);
+    knownUserIdsRef.current = knownUserIds;
+  }, [conversations]);
 
   useEffect(() => {
-    knownUserIdsRef.current = new Set(users.map((user) => user._id));
-  }, [users]);
+    getConversations();
+    hasFetchedConversationsRef.current = true;
+  }, [getConversations]);
 
-  // Load the conversation list once on mount.
   useEffect(() => {
-    getUsers();
-    hasFetchedUsersRef.current = true;
-  }, [getUsers]);
-
-  // The server broadcasts the full online-user list to every client on each
-  // connect/disconnect. Refetching the entire sidebar (an N+1 query on the API)
-  // on every heartbeat is wasteful and causes flicker, so only refetch when an
-  // online user we have never seen appears (e.g. a brand-new signup). Presence
-  // dots stay live because they read from `onlineUsers` directly.
-  useEffect(() => {
-    if (!hasFetchedUsersRef.current) return;
+    if (!hasFetchedConversationsRef.current) return;
     const hasUnknownOnlineUser = onlineUsers.some(
       (id) => id !== authUser?._id && !knownUserIdsRef.current.has(id)
     );
     if (hasUnknownOnlineUser) {
-      getUsers();
+      getConversations();
     }
-  }, [onlineUsers, getUsers, authUser?._id]);
+  }, [authUser?._id, getConversations, onlineUsers]);
 
   useEffect(() => {
-    onFilteredUsersChange(filteredUsers.map((user) => user._id));
-  }, [filteredUsers, onFilteredUsersChange]);
+    onFilteredUsersChange(
+      filteredConversations.map((conversation) => toNormalizedId(conversation._id))
+    );
+  }, [filteredConversations, onFilteredUsersChange]);
 
   useEffect(() => {
-    onMenuOpenChange(menuOpen);
+    onMenuOpenChange(menuOpen || isCreateGroupOpen);
     return () => onMenuOpenChange(false);
-  }, [menuOpen, onMenuOpenChange]);
+  }, [isCreateGroupOpen, menuOpen, onMenuOpenChange]);
 
   useEffect(() => {
     if (!focusSearchSignal) return;
@@ -96,6 +115,7 @@ const Sidebar = ({
   useEffect(() => {
     if (!escapeSignal) return;
     setMenuOpen(false);
+    setIsCreateGroupOpen(false);
   }, [escapeSignal]);
 
   useEffect(() => {
@@ -155,10 +175,31 @@ const Sidebar = ({
     }
   }, [menuOpen]);
 
+  const openCreateGroupModal = async () => {
+    setMenuOpen(false);
+    setIsCreateGroupOpen(true);
+    if (!contacts.length) {
+      await getContacts();
+    }
+  };
+
+  const handleCreateGroup = async ({ name, participantIds }) => {
+    setIsCreatingGroup(true);
+    const createdConversation = await createGroupConversation({
+      name,
+      participantIds,
+    });
+    if (createdConversation) {
+      setIsCreateGroupOpen(false);
+      toast.success("Group created");
+    }
+    setIsCreatingGroup(false);
+  };
+
   return (
     <div
       className={`h-full px-4 py-5 lg:px-5 lg:py-6 border-r border-white/10 bg-[linear-gradient(180deg,rgba(132,123,194,0.1),rgba(20,18,33,0.65))] text-white overflow-y-auto ${
-        selectedUser ? "max-md:hidden" : ""
+        selectedConversation ? "max-md:hidden" : ""
       }`}
     >
       <div className="pb-5 border-b border-white/10">
@@ -177,7 +218,7 @@ const Sidebar = ({
             <button
               ref={menuTriggerRef}
               type="button"
-              onClick={() => setMenuOpen((prev) => !prev)}
+              onClick={() => setMenuOpen((previousValue) => !previousValue)}
               aria-haspopup="menu"
               aria-expanded={menuOpen}
               aria-controls="sidebar-actions-menu"
@@ -194,8 +235,17 @@ const Sidebar = ({
               <div
                 id="sidebar-actions-menu"
                 role="menu"
-                className="absolute top-12 right-0 z-20 w-52 p-2 menu-surface animate-slide-up"
+                className="absolute top-12 right-0 z-20 w-56 p-2 menu-surface animate-slide-up"
               >
+                <button
+                  type="button"
+                  role="menuitem"
+                  onClick={openCreateGroupModal}
+                  className="w-full text-left px-3 py-2 rounded-lg text-sm hover:bg-white/10 flex items-center gap-2"
+                >
+                  <span className="h-2 w-2 rounded-full bg-brand-300" />
+                  New Group
+                </button>
                 <button
                   type="button"
                   role="menuitem"
@@ -252,6 +302,7 @@ const Sidebar = ({
             )}
           </div>
         </div>
+
         <div className="field-shell flex items-center gap-2 py-3 px-4 mt-5">
           <img
             src={assets.search_icon}
@@ -265,10 +316,10 @@ const Sidebar = ({
             id="conversation-search"
             ref={searchInputRef}
             value={input}
-            onChange={(e) => setInput(e.target.value)}
+            onChange={(event) => setInput(event.target.value)}
             type="text"
             className="field-input text-sm flex-1"
-            placeholder="Search users..."
+            placeholder="Search conversations..."
           />
           {input && (
             <button
@@ -294,81 +345,110 @@ const Sidebar = ({
             </div>
           ))}
 
-        {!usersLoading && filteredUsers.length === 0 && (
+        {!usersLoading && filteredConversations.length === 0 && (
           <div className="glass-subtle border border-white/10 rounded-2xl p-5 text-center text-sm text-white/70">
             <p className="font-medium text-white/85">No conversations found</p>
             <p className="mt-1 text-xs text-white/55">
-              Try a different name or start a new chat.
+              Try a different search or create a group.
             </p>
           </div>
         )}
 
         {!usersLoading &&
-          filteredUsers.map((user, index) => {
-            const isOnline = onlineUsers.includes(user._id);
-            const isActive = selectedUser?._id === user._id;
+          filteredConversations.map((conversation, index) => {
+            const conversationId = toNormalizedId(conversation._id);
+            const peerId = getConversationPeerId(conversation);
+            const directOnline = Boolean(peerId && onlineUsers.includes(peerId));
+            const onlineParticipantsCount = (conversation.participants || []).filter(
+              (participant) =>
+                participant._id !== authUser?._id &&
+                onlineUsers.includes(toNormalizedId(participant._id))
+            ).length;
+
+            const isActive =
+              toNormalizedId(selectedConversation?._id) === conversationId;
+            const unreadCount = Number(unseenMessages[conversationId] || 0);
+            const title = getConversationTitle(conversation);
+            const subtitle = conversation.lastMessagePreview
+              ? conversation.lastMessagePreview
+              : isGroupConversation(conversation)
+                ? `${Math.max((conversation.participants || []).length - 1, 0)} members`
+                : directOnline
+                  ? "Online now"
+                  : formatLastSeen(conversation.peer?.lastSeen);
 
             return (
               <button
                 type="button"
-                key={user._id}
+                key={conversationId}
                 role="listitem"
                 aria-current={isActive ? "true" : undefined}
-                aria-label={`${user.fullName}${unseenMessages[user._id] ? `, ${unseenMessages[user._id]} unread` : ""}`}
+                aria-label={`${title}${unreadCount ? `, ${unreadCount} unread` : ""}`}
                 onClick={() => {
-                  setSelectedUser(user);
-                  setUnseenMessages((prev) => ({ ...prev, [user._id]: 0 }));
+                  setSelectedConversation(conversation);
+                  setUnseenMessages((previousUnseenMessages) => ({
+                    ...previousUnseenMessages,
+                    [conversationId]: 0,
+                  }));
                 }}
-                onMouseEnter={() => onKeyboardUserHover?.(user._id)}
-                onFocus={() => onKeyboardUserHover?.(user._id)}
+                onMouseEnter={() => onKeyboardUserHover?.(conversationId)}
+                onFocus={() => onKeyboardUserHover?.(conversationId)}
                 style={{ animationDelay: `${index * 28}ms` }}
                 className={`w-full relative flex items-center gap-3 p-2.5 pr-3 rounded-2xl cursor-pointer text-left transition-all duration-200 border ${
                   isActive
                     ? "bg-white/10 border-brand-300/40 shadow-soft"
                     : "border-transparent hover:bg-white/7 hover:border-white/10"
-                } ${keyboardUserId === user._id && !isActive ? "border-brand-300/25 bg-white/[0.04]" : ""} stagger-item`}
+                } ${keyboardUserId === conversationId && !isActive ? "border-brand-300/25 bg-white/[0.04]" : ""} stagger-item`}
               >
                 <div className="relative">
                   <img
-                    src={user?.profilePic || assets.avatar_icon}
-                    alt={`${user.fullName} profile`}
+                    src={getConversationAvatar(conversation) || assets.avatar_icon}
+                    alt={`${title} avatar`}
                     loading="lazy"
                     decoding="async"
                     width="44"
                     height="44"
                     className="w-11 h-11 rounded-full object-cover border border-white/20"
                   />
-                  {isOnline && (
+                  {isDirectConversation(conversation) && directOnline && (
                     <>
                       <span className="absolute -bottom-0.5 -right-0.5 h-3.5 w-3.5 rounded-full bg-success border-2 border-surface-900" />
                       <span className="absolute -bottom-0.5 -right-0.5 h-3.5 w-3.5 rounded-full bg-success/80 animate-pulse-ring" />
                     </>
                   )}
+                  {isGroupConversation(conversation) && onlineParticipantsCount > 0 && (
+                    <span className="absolute -bottom-0.5 -right-0.5 min-w-4 h-4 px-1 rounded-full bg-success text-[10px] leading-4 text-surface-900 font-semibold border border-surface-900">
+                      {onlineParticipantsCount}
+                    </span>
+                  )}
                 </div>
                 <div className="min-w-0 flex-1">
-                  <p className="truncate text-sm font-medium tracking-wide">
-                    {user.fullName}
-                  </p>
-                  <p className="text-xs text-white/55 truncate mt-0.5">
-                    {input.trim()
-                      ? user.lastMessagePreview || (isOnline ? "Online now" : "Last seen recently")
-                      : isOnline
-                        ? "Online now"
-                        : user.lastMessagePreview || "Last seen recently"}
-                  </p>
+                  <p className="truncate text-sm font-medium tracking-wide">{title}</p>
+                  <p className="text-xs text-white/55 truncate mt-0.5">{subtitle}</p>
                 </div>
-                {unseenMessages[user._id] > 0 && (
+                {unreadCount > 0 && (
                   <span className="text-[11px] min-w-5 h-5 px-1.5 flex justify-center items-center rounded-full btn-gradient">
-                    {unseenMessages[user._id]}
+                    {unreadCount}
                   </span>
                 )}
               </button>
             );
           })}
       </div>
+
+      <CreateGroupModal
+        isOpen={isCreateGroupOpen}
+        onClose={() => setIsCreateGroupOpen(false)}
+        contacts={contacts}
+        onSubmit={handleCreateGroup}
+        title="Create group"
+        submitLabel="Create"
+        showGroupName
+        isSubmitting={isCreatingGroup}
+        excludedUserIds={[authUser?._id]}
+      />
     </div>
   );
 };
 
 export default Sidebar;
-

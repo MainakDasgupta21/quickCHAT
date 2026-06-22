@@ -9,6 +9,7 @@ import { getErrorMessage } from "../src/lib/utils";
 export const AuthContext = createContext();
 const backendUrl = import.meta.env.VITE_BACKEND_URL;
 axios.defaults.baseURL = backendUrl;
+axios.defaults.withCredentials = true;
 
 export const AuthProvider = ({ children }) => {
   const [token, setToken] = useState(localStorage.getItem("token"));
@@ -89,27 +90,35 @@ export const AuthProvider = ({ children }) => {
 
   //connect socket func to handle socket connection and online users updates
   const connectSocket = useCallback(
-    (userData) => {
+    (userData, tokenOverride = null) => {
       if (!userData) return;
       setConnectionStatus("connecting");
 
       setSocket((previousSocket) => {
-        const existingUserId = previousSocket?.io?.opts?.query?.userId;
+        const existingUserId = previousSocket?.authUserId;
         if (previousSocket?.connected && existingUserId === userData._id) {
           setConnectionStatus("connected");
           return previousSocket;
         }
 
         previousSocket?.disconnect();
+        const socketToken =
+          tokenOverride || token || localStorage.getItem("token") || "";
+
+        if (!socketToken) {
+          setConnectionStatus("disconnected");
+          return null;
+        }
 
         const newSocket = io(backendUrl, {
-          query: {
-            userId: userData._id,
+          auth: {
+            token: socketToken,
           },
           reconnection: true,
           reconnectionAttempts: 8,
           reconnectionDelay: 800,
         });
+        newSocket.authUserId = userData._id;
 
         newSocket.on("connect", () => {
           setConnectionStatus("connected");
@@ -131,7 +140,7 @@ export const AuthProvider = ({ children }) => {
         return newSocket;
       });
     },
-    []
+    [token]
   );
 
   //check if user is authenticated and if so , set the user data and connect the socket
@@ -161,7 +170,7 @@ export const AuthProvider = ({ children }) => {
       const { data } = await axios.post(`/api/auth/${state}`, credentials);
       if (data.success) {
         setAuthUser(data.userData);
-        connectSocket(data.userData);
+        connectSocket(data.userData, data.token);
         axios.defaults.headers.common["token"] = data.token;
         setToken(data.token);
         localStorage.setItem("token", data.token);
@@ -178,6 +187,11 @@ export const AuthProvider = ({ children }) => {
 
   //logout function to handle user logout and socket disconnection
   const logout = async () => {
+    try {
+      await axios.post("/api/auth/logout");
+    } catch {
+      // Best effort: still clear local auth state even if remote logout fails.
+    }
     localStorage.removeItem("token");
     setToken(null);
     setAuthUser(null);
