@@ -124,138 +124,146 @@ const MessageRow = React.memo(function MessageRow({
         }`}
       >
         <div
-          className={`message-bubble max-w-[78%] flex flex-col ${
+          className={`max-w-[78%] flex flex-col ${
             isOwn ? "items-end" : "items-start"
           }`}
         >
-          {!message.isDeleted && replySnippet && (
-            <button
-              type="button"
-              onClick={() => {
-                if (message.replyTo?._id) {
-                  messageElementRefs.current[
-                    message.replyTo._id
-                  ]?.scrollIntoView({
-                    behavior: "smooth",
-                    block: "center",
-                  });
-                }
-              }}
-              className={`mb-1 text-left text-xs px-3 py-2 rounded-xl border ${
-                isOwn
-                  ? "bg-brand-700/40 border-brand-200/25 text-white/80"
-                  : "bg-white/8 border-white/16 text-white/75"
-              }`}
-            >
-              <span className="block text-[10px] uppercase tracking-wide text-white/50">
-                Reply
-              </span>
-              <span className="line-clamp-1">{replySnippet}</span>
-            </button>
-          )}
-
-          {message.image && (
-            <button
-              type="button"
-              onClick={() => window.open(message.image, "_blank", "noopener,noreferrer")}
-              className={`rounded-2xl overflow-hidden border ${
-                isOwn ? "border-brand-300/55" : "border-white/20 bg-white/4"
-              }`}
-            >
-              <img
-                src={message.image}
-                alt="message media"
-                loading="lazy"
-                decoding="async"
-                className="max-h-64 sm:max-h-72 object-cover"
-              />
-            </button>
-          )}
-
-          {message.file?.url && !message.isDeleted && (
-            <a
-              href={message.file.url}
-              target="_blank"
-              rel="noreferrer"
-              className={`mb-1 rounded-2xl border px-3 py-2.5 text-sm ${
-                isOwn
-                  ? "bg-brand-700/40 border-brand-200/25 text-white/90"
-                  : "bg-white/8 border-white/16 text-white/85"
-              }`}
-            >
-              <p className="font-medium truncate max-w-56">
-                {message.file.name || "Attachment"}
-              </p>
-              <p className="text-xs text-white/60 mt-0.5">
-                {formatFileSize(message.file.size)} · Download
-              </p>
-            </a>
-          )}
-
-          {message.audio?.url && !message.isDeleted && (
-            <div className="mb-1">
-              <AudioMessage
-                src={message.audio.url}
-                duration={message.audio.duration}
-              />
-            </div>
-          )}
-
-          {message.isDeleted ? (
-            <div
-              className={`relative px-4 py-2.5 text-sm italic ${
-                isOwn
-                  ? "text-white/70 rounded-[18px] rounded-br-sm bg-brand-700/35 border border-brand-200/20"
-                  : "text-white/65 rounded-[18px] rounded-bl-sm bg-white/6 border border-white/14"
-              }`}
-            >
-              This message was deleted
-            </div>
-          ) : (
-            message.text && (
-              <div
-                className={`relative px-4 py-2.5 text-sm break-words leading-relaxed ${
+          <div
+            className={`message-content relative flex flex-col ${
+              isOwn
+                ? "items-end message-content--own"
+                : "items-start message-content--peer"
+            }`}
+          >
+            {!message.isDeleted && replySnippet && (
+              <button
+                type="button"
+                onClick={() => {
+                  if (message.replyTo?._id) {
+                    messageElementRefs.current[
+                      message.replyTo._id
+                    ]?.scrollIntoView({
+                      behavior: "smooth",
+                      block: "center",
+                    });
+                  }
+                }}
+                className={`mb-1 text-left text-xs px-3 py-2 rounded-xl border ${
                   isOwn
-                    ? "text-white rounded-[18px] rounded-br-sm bg-[var(--gradient-brand)] shadow-[0_10px_24px_rgba(86,61,218,0.34)]"
-                    : "text-white/92 rounded-[18px] rounded-bl-sm bg-white/8 border border-white/16 backdrop-blur-sm"
-                } ${
-                  isActiveSearchMatch
-                    ? "ring-2 ring-brand-200/80 ring-offset-2 ring-offset-transparent"
-                    : ""
+                    ? "bg-brand-700/40 border-brand-200/25 text-white/80"
+                    : "bg-white/8 border-white/16 text-white/75"
                 }`}
               >
-                {isSearchMatch ? highlightText(message.text, highlightQuery) : message.text}
-              </div>
-            )
-          )}
+                <span className="block text-[10px] uppercase tracking-wide text-white/50">
+                  Reply
+                </span>
+                <span className="line-clamp-1">{replySnippet}</span>
+              </button>
+            )}
 
-          {!message.isDeleted && (
-            <div
-              className={`message-actions-row mt-1 ${
-                isReactionOpen || isMenuOpen ? "message-actions-row--open" : ""
-              }`}
-            >
-              <div className="flex items-center gap-1.5">
-                <ReactionBar
-                  onSelectEmoji={(emoji) => onReact(message._id, emoji)}
-                  isPickerOpen={isReactionOpen}
-                  onPickerOpenChange={(open) =>
-                    onOpenReactionChange(message._id, open)
-                  }
-                  closeSignal={closeSignal}
+            {message.image && (
+              <button
+                type="button"
+                onClick={() => window.open(message.image, "_blank", "noopener,noreferrer")}
+                className={`rounded-2xl overflow-hidden border ${
+                  isOwn ? "border-brand-300/55" : "border-white/20 bg-white/4"
+                }`}
+              >
+                <img
+                  src={message.image}
+                  alt="message media"
+                  loading="lazy"
+                  decoding="async"
+                  className="max-h-64 sm:max-h-72 object-cover"
                 />
-                <MessageMenu
-                  canEdit={isOwn}
-                  isOpen={isMenuOpen}
-                  onOpenChange={(open) => onOpenMenuChange(message._id, open)}
-                  closeSignal={closeSignal}
-                  onReply={() => onReply(message)}
-                  onEdit={() => onStartEdit(message)}
-                  onDelete={() => onDelete(message._id)}
+              </button>
+            )}
+
+            {message.file?.url && !message.isDeleted && (
+              <a
+                href={message.file.url}
+                target="_blank"
+                rel="noreferrer"
+                className={`mb-1 rounded-2xl border px-3 py-2.5 text-sm ${
+                  isOwn
+                    ? "bg-brand-700/40 border-brand-200/25 text-white/90"
+                    : "bg-white/8 border-white/16 text-white/85"
+                }`}
+              >
+                <p className="font-medium truncate max-w-56">
+                  {message.file.name || "Attachment"}
+                </p>
+                <p className="text-xs text-white/60 mt-0.5">
+                  {formatFileSize(message.file.size)} · Download
+                </p>
+              </a>
+            )}
+
+            {message.audio?.url && !message.isDeleted && (
+              <div className="mb-1">
+                <AudioMessage
+                  src={message.audio.url}
+                  duration={message.audio.duration}
                 />
               </div>
-            </div>
-          )}
+            )}
+
+            {message.isDeleted ? (
+              <div
+                className={`relative px-4 py-2.5 text-sm italic ${
+                  isOwn
+                    ? "text-white/70 rounded-[18px] rounded-br-sm bg-brand-700/35 border border-brand-200/20"
+                    : "text-white/65 rounded-[18px] rounded-bl-sm bg-white/6 border border-white/14"
+                }`}
+              >
+                This message was deleted
+              </div>
+            ) : (
+              message.text && (
+                <div
+                  className={`relative px-4 py-2.5 text-sm break-words leading-relaxed ${
+                    isOwn
+                      ? "text-white rounded-[18px] rounded-br-sm bg-[var(--gradient-brand)] shadow-[0_10px_24px_rgba(86,61,218,0.34)]"
+                      : "text-white/92 rounded-[18px] rounded-bl-sm bg-white/8 border border-white/16 backdrop-blur-sm"
+                  } ${
+                    isActiveSearchMatch
+                      ? "ring-2 ring-brand-200/80 ring-offset-2 ring-offset-transparent"
+                      : ""
+                  }`}
+                >
+                  {isSearchMatch ? highlightText(message.text, highlightQuery) : message.text}
+                </div>
+              )
+            )}
+
+            {!message.isDeleted && (
+              <div
+                className={`message-actions-row ${
+                  isReactionOpen || isMenuOpen ? "message-actions-row--open" : ""
+                }`}
+              >
+                <div className="flex items-center gap-1.5">
+                  <ReactionBar
+                    onSelectEmoji={(emoji) => onReact(message._id, emoji)}
+                    isPickerOpen={isReactionOpen}
+                    onPickerOpenChange={(open) =>
+                      onOpenReactionChange(message._id, open)
+                    }
+                    closeSignal={closeSignal}
+                  />
+                  <MessageMenu
+                    canEdit={isOwn}
+                    isOpen={isMenuOpen}
+                    onOpenChange={(open) => onOpenMenuChange(message._id, open)}
+                    closeSignal={closeSignal}
+                    onReply={() => onReply(message)}
+                    onEdit={() => onStartEdit(message)}
+                    onDelete={() => onDelete(message._id)}
+                  />
+                </div>
+              </div>
+            )}
+          </div>
 
           {!!reactionGroups.length && (
             <div

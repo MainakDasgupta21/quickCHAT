@@ -280,13 +280,25 @@ body {
   }
 
   @media (hover: hover) and (pointer: fine) {
-    .message-item .message-actions-row {
+    .message-content .message-actions-row {
+      position: absolute;
+      bottom: 100%;
+      padding-bottom: 0.3rem;
       opacity: 0;
       pointer-events: none;
+      z-index: 20;
     }
 
-    .message-bubble:hover .message-actions-row,
-    .message-item .message-actions-row--open {
+    .message-content--own .message-actions-row {
+      right: 0;
+    }
+
+    .message-content--peer .message-actions-row {
+      left: 0;
+    }
+
+    .message-content:hover .message-actions-row,
+    .message-content .message-actions-row--open {
       opacity: 1;
       pointer-events: auto;
     }
@@ -296,6 +308,7 @@ body {
     .message-actions-row {
       opacity: 1;
       pointer-events: auto;
+      margin-top: 0.25rem;
     }
   }
 
