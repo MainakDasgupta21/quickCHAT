@@ -36,6 +36,8 @@ const ChatContainer = ({
     editMessage = async () => false,
     deleteMessage = async () => false,
     reactToMessage = async () => false,
+    retryMessage = () => {},
+    discardFailedMessage = () => {},
     replyTo,
     setReplyTo,
     searchMessages,
@@ -425,6 +427,26 @@ const ChatContainer = ({
     [deleteMessage]
   );
 
+  const handleRetry = useCallback(
+    (clientId) => {
+      if (!clientId) return;
+      retryMessage(clientId);
+      setOpenMessageMenuId(null);
+      setOpenReactionPickerId(null);
+    },
+    [retryMessage]
+  );
+
+  const handleDiscard = useCallback(
+    (clientId) => {
+      if (!clientId) return;
+      discardFailedMessage(clientId);
+      setOpenMessageMenuId(null);
+      setOpenReactionPickerId(null);
+    },
+    [discardFailedMessage]
+  );
+
   const handleOpenMenuChange = useCallback((messageId, open) => {
     setOpenMessageMenuId(open ? messageId : null);
     if (open) setOpenReactionPickerId(null);
@@ -612,6 +634,8 @@ const ChatContainer = ({
             onReply={handleReply}
             onStartEdit={handleStartEdit}
             onDelete={handleDelete}
+            onRetry={handleRetry}
+            onDiscard={handleDiscard}
             onOpenMenuChange={handleOpenMenuChange}
             onOpenReactionChange={handleOpenReactionChange}
           />

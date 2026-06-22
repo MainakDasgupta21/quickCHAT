@@ -61,6 +61,17 @@ const getReplySnippet = (message) => {
   return "Attachment";
 };
 
+const getOwnMessageStatus = (message) => {
+  if (message.seen) return "read";
+  return message.status || "sent";
+};
+
+const isPendingMessage = (message) => {
+  const status = String(message?.status || "");
+  const messageId = String(message?._id || "");
+  return status === "sending" || status === "failed" || messageId.startsWith("temp-");
+};
+
 // Each row is memoized so that an update to a single message (a reaction, an
 // edit, a seen receipt) only re-renders that row — and so composer typing or
 // presence updates in the parent never re-render the conversation at all.
@@ -81,6 +92,8 @@ const MessageRow = React.memo(function MessageRow({
   onReply,
   onStartEdit,
   onDelete,
+  onRetry,
+  onDiscard,
   onOpenMenuChange,
   onOpenReactionChange,
 }) {
@@ -89,6 +102,8 @@ const MessageRow = React.memo(function MessageRow({
     [message.reactions, authUserId]
   );
   const replySnippet = getReplySnippet(message);
+  const isPendingLocalMessage = isPendingMessage(message);
+  const ownStatus = isOwn ? getOwnMessageStatus(message) : null;
 
   return (
     <>
@@ -236,7 +251,7 @@ const MessageRow = React.memo(function MessageRow({
               )
             )}
 
-            {!message.isDeleted && (
+            {!message.isDeleted && !isPendingLocalMessage && (
               <div
                 className={`message-actions-row ${
                   isReactionOpen || isMenuOpen ? "message-actions-row--open" : ""
@@ -265,7 +280,7 @@ const MessageRow = React.memo(function MessageRow({
             )}
           </div>
 
-          {!!reactionGroups.length && (
+          {!!reactionGroups.length && !isPendingLocalMessage && (
             <div
               className={`mt-1 flex flex-wrap gap-1 ${
                 isOwn ? "justify-end" : "justify-start"
@@ -301,14 +316,52 @@ const MessageRow = React.memo(function MessageRow({
               {formatMessageTime(message.createdAt)}
             </span>
             {isOwn && (
-              <span
-                className={`font-semibold tracking-tight ${
-                  message.seen ? "text-brand-200" : "text-white/55"
-                }`}
-                title={message.seen ? "Seen" : "Delivered"}
-              >
-                {message.seen ? "✓✓" : "✓"}
-              </span>
+              <>
+                {ownStatus === "sending" && (
+                  <span className="font-semibold tracking-tight text-white/45" title="Sending">
+                    ◷
+                  </span>
+                )}
+                {ownStatus === "sent" && (
+                  <span className="font-semibold tracking-tight text-white/55" title="Sent">
+                    ✓
+                  </span>
+                )}
+                {ownStatus === "delivered" && (
+                  <span
+                    className="font-semibold tracking-tight text-white/55"
+                    title="Delivered"
+                  >
+                    ✓✓
+                  </span>
+                )}
+                {ownStatus === "read" && (
+                  <span className="font-semibold tracking-tight text-brand-200" title="Seen">
+                    ✓✓
+                  </span>
+                )}
+                {ownStatus === "failed" && (
+                  <>
+                    <span className="font-semibold tracking-tight text-rose-200" title="Failed">
+                      Failed
+                    </span>
+                    <button
+                      type="button"
+                      onClick={() => onRetry(message.clientId)}
+                      className="rounded-md border border-white/20 px-1.5 py-0.5 text-[10px] text-white/75 hover:text-white"
+                    >
+                      Retry
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => onDiscard(message.clientId)}
+                      className="rounded-md border border-rose-200/40 px-1.5 py-0.5 text-[10px] text-rose-200 hover:text-rose-100"
+                    >
+                      Discard
+                    </button>
+                  </>
+                )}
+              </>
             )}
             {message.editedAt && !message.isDeleted && (
               <span className="text-white/40">(edited)</span>
@@ -335,16 +388,20 @@ const MessageList = React.memo(function MessageList({
   onReply,
   onStartEdit,
   onDelete,
+  onRetry,
+  onDiscard,
   onOpenMenuChange,
   onOpenReactionChange,
 }) {
   const searchMatchSet = useMemo(
-    () => new Set(searchMatchIds),
+    () => new Set(searchMatchIds.map((messageId) => String(messageId))),
     [searchMatchIds]
   );
   const highlightQuery = searchMatchSet.size ? searchQuery : "";
 
   return messages.map((message, index) => {
+    const messageId = String(message._id);
+    const senderId = String(message.senderId?._id || message.senderId || "");
     const previousMessage = messages[index - 1];
     const showDayDivider =
       !previousMessage ||
@@ -353,14 +410,14 @@ const MessageList = React.memo(function MessageList({
 
     return (
       <MessageRow
-        key={message._id || index}
+        key={message.clientId || message._id || index}
         message={message}
         authUserId={authUserId}
-        isOwn={message.senderId === authUserId}
+        isOwn={senderId === String(authUserId)}
         showDayDivider={showDayDivider}
         showUnreadDivider={firstUnreadIndex === index}
-        isSearchMatch={searchMatchSet.has(message._id)}
-        isActiveSearchMatch={activeSearchMatchId === message._id}
+        isSearchMatch={searchMatchSet.has(messageId)}
+        isActiveSearchMatch={String(activeSearchMatchId || "") === messageId}
         isMenuOpen={openMessageMenuId === message._id}
         isReactionOpen={openReactionPickerId === message._id}
         highlightQuery={highlightQuery}
@@ -370,6 +427,8 @@ const MessageList = React.memo(function MessageList({
         onReply={onReply}
         onStartEdit={onStartEdit}
         onDelete={onDelete}
+        onRetry={onRetry}
+        onDiscard={onDiscard}
         onOpenMenuChange={onOpenMenuChange}
         onOpenReactionChange={onOpenReactionChange}
       />

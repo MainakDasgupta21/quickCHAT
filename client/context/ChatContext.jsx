@@ -8,10 +8,56 @@ import {
 } from "react";
 import { AuthContext } from "./AuthContext";
 import toast from "react-hot-toast";
-import { getErrorMessage } from "../src/lib/utils";
+import { createClientId, getErrorMessage } from "../src/lib/utils";
 
 // eslint-disable-next-line react-refresh/only-export-components
 export const ChatContext = createContext();
+
+const MAX_AUTO_RETRIES = 2;
+const RETRY_DELAYS_MS = [800, 1600];
+
+const delay = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
+
+const shouldAutoRetrySend = (error) =>
+  !error?.response || Number(error.response.status) >= 500;
+
+const buildOptimisticMessage = ({
+  clientId,
+  messageData,
+  senderId,
+  replyToMessage,
+}) => {
+  const createdAt = new Date().toISOString();
+  return {
+    _id: `temp-${clientId}`,
+    clientId,
+    senderId,
+    text: String(messageData?.text || ""),
+    image: messageData?.image || "",
+    file: messageData?.file
+      ? {
+          url: messageData.file.data || "",
+          name: messageData.file.name || "Attachment",
+          type: messageData.file.type || "application/octet-stream",
+          size: Number(messageData.file.size || 0),
+        }
+      : null,
+    audio: messageData?.audio
+      ? {
+          url: messageData.audio.data || "",
+          duration: Number(messageData.audio.duration || 0),
+        }
+      : null,
+    replyTo: replyToMessage || null,
+    reactions: [],
+    seen: false,
+    isDeleted: false,
+    editedAt: null,
+    status: "sending",
+    createdAt,
+    updatedAt: createdAt,
+  };
+};
 
 export const ChatProvider = ({ children }) => {
   const [messages, setMessages] = useState([]);
@@ -25,8 +71,10 @@ export const ChatProvider = ({ children }) => {
   const hasLoadedUsersRef = useRef(false);
   const selectedUserRef = useRef(null);
   const usersRef = useRef([]);
+  const messagesRef = useRef([]);
+  const pendingPayloadsRef = useRef(new Map());
 
-  const { socket, axios, showNotification, playReceiveCue, playSendCue } =
+  const { authUser, socket, axios, showNotification, playReceiveCue, playSendCue } =
     useContext(AuthContext);
 
   useEffect(() => {
@@ -36,6 +84,10 @@ export const ChatProvider = ({ children }) => {
   useEffect(() => {
     usersRef.current = users;
   }, [users]);
+
+  useEffect(() => {
+    messagesRef.current = messages;
+  }, [messages]);
 
   const getUsers = useCallback(async () => {
     if (!hasLoadedUsersRef.current) {
@@ -87,28 +139,109 @@ export const ChatProvider = ({ children }) => {
     [axios, socket]
   );
 
-  const sendMessage = useCallback(
-    async (messageData) => {
-      if (!selectedUser?._id) return;
-
+  const performSend = useCallback(
+    async (clientId, peerId, payload, attempt = 0) => {
       try {
-        const { data } = await axios.post(
-          `/api/messages/send/${selectedUser._id}`,
-          messageData
-        );
-        if (data.success) {
-          setMessages((prevMessages) => [...prevMessages, data.newMessage]);
-          setReplyTo(null);
-          playSendCue();
-        } else {
-          toast.error(data.message);
+        const { data } = await axios.post(`/api/messages/send/${peerId}`, {
+          ...payload,
+          clientId,
+        });
+
+        if (data.success && data.newMessage) {
+          setMessages((prevMessages) =>
+            prevMessages.map((message) =>
+              message.clientId === clientId ? data.newMessage : message
+            )
+          );
+          pendingPayloadsRef.current.delete(clientId);
+          return true;
         }
+
+        setMessages((prevMessages) =>
+          prevMessages.map((message) =>
+            message.clientId === clientId ? { ...message, status: "failed" } : message
+          )
+        );
+        toast.error(data.message || "Could not send message");
+        return false;
       } catch (error) {
+        if (attempt < MAX_AUTO_RETRIES && shouldAutoRetrySend(error)) {
+          const retryDelay =
+            RETRY_DELAYS_MS[attempt] ||
+            RETRY_DELAYS_MS[RETRY_DELAYS_MS.length - 1] ||
+            1600;
+          await delay(retryDelay);
+          return performSend(clientId, peerId, payload, attempt + 1);
+        }
+
+        setMessages((prevMessages) =>
+          prevMessages.map((message) =>
+            message.clientId === clientId ? { ...message, status: "failed" } : message
+          )
+        );
         toast.error(getErrorMessage(error));
+        return false;
       }
     },
-    [axios, selectedUser?._id, playSendCue]
+    [axios]
   );
+
+  const sendMessage = useCallback(
+    (messageData) => {
+      const activeSelectedUser = selectedUserRef.current;
+      if (!activeSelectedUser?._id || !authUser?._id) return;
+
+      const clientId = createClientId();
+      const payload = {
+        text: messageData?.text,
+        image: messageData?.image,
+        file: messageData?.file,
+        audio: messageData?.audio,
+        replyTo: messageData?.replyTo,
+      };
+      const replyToMessage =
+        payload.replyTo &&
+        messagesRef.current.find((message) => message._id === payload.replyTo);
+      const optimisticMessage = buildOptimisticMessage({
+        clientId,
+        messageData: payload,
+        senderId: authUser._id,
+        replyToMessage,
+      });
+
+      pendingPayloadsRef.current.set(clientId, {
+        peerId: activeSelectedUser._id,
+        payload,
+      });
+      setMessages((prevMessages) => [...prevMessages, optimisticMessage]);
+      setReplyTo(null);
+      playSendCue();
+      void performSend(clientId, activeSelectedUser._id, payload);
+    },
+    [authUser?._id, performSend, playSendCue]
+  );
+
+  const retryMessage = useCallback(
+    (clientId) => {
+      const pendingPayload = pendingPayloadsRef.current.get(clientId);
+      if (!pendingPayload) return;
+
+      setMessages((prevMessages) =>
+        prevMessages.map((message) =>
+          message.clientId === clientId ? { ...message, status: "sending" } : message
+        )
+      );
+      void performSend(clientId, pendingPayload.peerId, pendingPayload.payload, 0);
+    },
+    [performSend]
+  );
+
+  const discardFailedMessage = useCallback((clientId) => {
+    pendingPayloadsRef.current.delete(clientId);
+    setMessages((prevMessages) =>
+      prevMessages.filter((message) => message.clientId !== clientId)
+    );
+  }, []);
 
   const editMessage = useCallback(
     async (messageId, text) => {
@@ -240,6 +373,7 @@ export const ChatProvider = ({ children }) => {
 
       if (activeSelectedUser && newMessage.senderId === activeSelectedUser._id) {
         newMessage.seen = true;
+        newMessage.status = "read";
         setMessages((prevMessages) => [...prevMessages, newMessage]);
         playReceiveCue();
         try {
@@ -307,10 +441,30 @@ export const ChatProvider = ({ children }) => {
         return;
       }
 
+      const seenMessageIds = new Set(messageIds.map((messageId) => String(messageId)));
       setMessages((prevMessages) =>
         prevMessages.map((message) =>
-          messageIds.includes(message._id) ? { ...message, seen: true } : message
+          seenMessageIds.has(String(message._id))
+            ? { ...message, seen: true, status: "read" }
+            : message
         )
+      );
+    });
+
+    socket.on("messageDelivered", ({ messageIds = [] }) => {
+      if (!Array.isArray(messageIds) || messageIds.length === 0) return;
+      const deliveredMessageIds = new Set(
+        messageIds.map((messageId) => String(messageId))
+      );
+
+      setMessages((prevMessages) =>
+        prevMessages.map((message) => {
+          if (!deliveredMessageIds.has(String(message._id))) return message;
+          if (message.seen || message.status === "read") {
+            return { ...message, status: "read" };
+          }
+          return { ...message, status: "delivered" };
+        })
       );
     });
 
@@ -353,6 +507,7 @@ export const ChatProvider = ({ children }) => {
     socket.off("typing");
     socket.off("stopTyping");
     socket.off("messagesSeen");
+    socket.off("messageDelivered");
     socket.off("messageUpdated");
     socket.off("messageDeleted");
     socket.off("messageReaction");
@@ -371,6 +526,8 @@ export const ChatProvider = ({ children }) => {
     getUsers,
     getMessages,
     sendMessage,
+    retryMessage,
+    discardFailedMessage,
     editMessage,
     deleteMessage,
     reactToMessage,

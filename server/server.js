@@ -5,6 +5,7 @@ import http from "http";
 import { connectDB } from "./lib/db.js";
 import userRouter from "./routes/userRoutes.js";
 import messageRouter from "./routes/messageRoutes.js";
+import Message from "./models/message.js";
 import { Server } from "socket.io"
 
 
@@ -25,6 +26,50 @@ export const io = new Server(server, {
 //store online users
 export const userSocketMap = {}; //{userId: socketId}
 
+const markPendingDelivered = async (receiverId) => {
+        if (!receiverId) return;
+
+        try {
+                const pendingMessages = await Message.find({
+                        receiverId,
+                        seen: false,
+                        status: "sent",
+                })
+                        .select("_id senderId")
+                        .lean();
+
+                if (!pendingMessages.length) return;
+
+                const pendingMessageIds = pendingMessages.map((message) => message._id);
+                await Message.updateMany(
+                        { _id: { $in: pendingMessageIds } },
+                        { status: "delivered" }
+                );
+
+                const senderToMessageIds = new Map();
+                pendingMessages.forEach((message) => {
+                        const senderId = message.senderId?.toString();
+                        if (!senderId) return;
+                        if (!senderToMessageIds.has(senderId)) {
+                                senderToMessageIds.set(senderId, []);
+                        }
+                        senderToMessageIds.get(senderId).push(message._id.toString());
+                });
+
+                senderToMessageIds.forEach((messageIds, senderId) => {
+                        const senderSocketId = userSocketMap[senderId];
+                        if (senderSocketId) {
+                                io.to(senderSocketId).emit("messageDelivered", {
+                                        messageIds,
+                                        status: "delivered",
+                                });
+                        }
+                });
+        } catch (error) {
+                console.log(error.message);
+        }
+};
+
 
 
 
@@ -34,6 +79,7 @@ io.on("connection", (socket) => {
         console.log("User Connected", userId);
 
         if (userId) userSocketMap[userId] = socket.id;
+        markPendingDelivered(userId);
 
         //Emit online users to all connected client
         io.emit("getOnlineUsers", Object.keys(userSocketMap))

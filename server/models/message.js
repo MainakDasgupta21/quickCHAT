@@ -52,6 +52,12 @@ const messageSchema = new mongoose.Schema(
       default: null,
     },
     reactions: { type: [reactionSchema], default: [] },
+    status: {
+      type: String,
+      enum: ["sent", "delivered", "read"],
+      default: "sent",
+    },
+    clientId: { type: String, default: null },
     seen: { type: Boolean, default: false },
     isDeleted: { type: Boolean, default: false },
     editedAt: { type: Date, default: null },
@@ -65,6 +71,8 @@ messageSchema.index({ senderId: 1, receiverId: 1, createdAt: -1 });
 messageSchema.index({ receiverId: 1, senderId: 1, createdAt: -1 });
 // Unseen-count aggregation for the sidebar.
 messageSchema.index({ receiverId: 1, seen: 1 });
+// Idempotency key for optimistic send retries from the same sender.
+messageSchema.index({ senderId: 1, clientId: 1 }, { sparse: true });
 
 
 const Message = mongoose.model("Message", messageSchema);

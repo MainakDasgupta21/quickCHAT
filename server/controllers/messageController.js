@@ -134,7 +134,7 @@ export const getMessages = async (req, res) => {
 
     await Message.updateMany(
       { senderId: selectedUserId, receiverId: myId, seen: false },
-      { seen: true }
+      { seen: true, status: "read" }
     );
 
     res.json({ success: true, messages });
@@ -155,8 +155,9 @@ export const markMessageAsSeen = async (req, res) => {
       return res.json({ success: false, message: "Message not found" });
     }
 
-    if (!message.seen) {
+    if (!message.seen || message.status !== "read") {
       message.seen = true;
+      message.status = "read";
       await message.save();
     }
 
@@ -177,9 +178,22 @@ export const markMessageAsSeen = async (req, res) => {
 //send message to selected user
 export const sendMessage = async (req, res) => {
   try {
-    const { text = "", image, file, audio, replyTo } = req.body;
+    const { text = "", image, file, audio, replyTo, clientId } = req.body;
     const receiverId = req.params.id;
     const senderId = req.user._id;
+    const normalizedClientId =
+      typeof clientId === "string" ? clientId.trim() : "";
+
+    if (normalizedClientId) {
+      const existingMessage = await Message.findOne({
+        senderId,
+        clientId: normalizedClientId,
+      }).populate("replyTo", "text image file audio senderId isDeleted");
+
+      if (existingMessage) {
+        return res.json({ success: true, newMessage: existingMessage });
+      }
+    }
 
     let imageUrl = "";
     let filePayload = null;
@@ -219,6 +233,8 @@ export const sendMessage = async (req, res) => {
       image: imageUrl,
       file: filePayload,
       audio: audioPayload,
+      status: "sent",
+      clientId: normalizedClientId || null,
       replyTo:
         replyTo && mongoose.Types.ObjectId.isValid(replyTo)
           ? replyTo
@@ -230,7 +246,17 @@ export const sendMessage = async (req, res) => {
       "text image file audio senderId isDeleted"
     );
 
+    const isReceiverOnline = Boolean(userSocketMap[receiverId?.toString()]);
     emitToUser(receiverId, "newMessage", populatedMessage);
+
+    if (isReceiverOnline && populatedMessage) {
+      await Message.updateOne(
+        { _id: populatedMessage._id },
+        { status: "delivered" }
+      );
+      populatedMessage.status = "delivered";
+    }
+
     res.json({ success: true, newMessage: populatedMessage });
   } catch (error) {
     console.log(error.message);

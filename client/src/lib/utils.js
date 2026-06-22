@@ -53,4 +53,13 @@ export function getErrorMessage(error, fallback = "Something went wrong. Please 
   );
 }
 
+export function createClientId() {
+  if (typeof crypto !== "undefined" && typeof crypto.randomUUID === "function") {
+    return crypto.randomUUID();
+  }
+
+  const randomPart = Math.random().toString(36).slice(2, 10);
+  return `client-${Date.now()}-${randomPart}`;
+}
+
 export const MAX_IMAGE_UPLOAD_BYTES = 5 * 1024 * 1024; // 5MB raw (~6.85MB once base64-encoded)
