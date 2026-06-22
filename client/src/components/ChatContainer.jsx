@@ -1059,6 +1059,33 @@ const ChatContainer = ({
     return () => clearTimeout(searchTimeoutRef.current);
   }, [searchMessages, searchQuery, selectedConversation?._id]);
 
+  const ensureMessageLoaded = useCallback(
+    async (messageId) => {
+      const normalizedMessageId = String(messageId || "");
+      if (!normalizedMessageId) return -1;
+
+      const existingIndex = messageIndexByIdRef.current.get(normalizedMessageId);
+      if (typeof existingIndex === "number") {
+        return existingIndex;
+      }
+
+      let attempts = 0;
+      while (hasMoreMessagesRef.current && attempts < 50) {
+        const didLoadOlder = await loadOlderMessages();
+        attempts += 1;
+
+        const loadedIndex = messageIndexByIdRef.current.get(normalizedMessageId);
+        if (typeof loadedIndex === "number") {
+          return loadedIndex;
+        }
+        if (!didLoadOlder) break;
+      }
+
+      return -1;
+    },
+    [loadOlderMessages]
+  );
+
   useEffect(() => {
     if (!searchMatchIds.length) return;
     let isCancelled = false;
@@ -1217,33 +1244,6 @@ const ChatContainer = ({
       setPendingBelowCount(0);
     }
   }, []);
-
-  const ensureMessageLoaded = useCallback(
-    async (messageId) => {
-      const normalizedMessageId = String(messageId || "");
-      if (!normalizedMessageId) return -1;
-
-      const existingIndex = messageIndexByIdRef.current.get(normalizedMessageId);
-      if (typeof existingIndex === "number") {
-        return existingIndex;
-      }
-
-      let attempts = 0;
-      while (hasMoreMessagesRef.current && attempts < 50) {
-        const didLoadOlder = await loadOlderMessages();
-        attempts += 1;
-
-        const loadedIndex = messageIndexByIdRef.current.get(normalizedMessageId);
-        if (typeof loadedIndex === "number") {
-          return loadedIndex;
-        }
-        if (!didLoadOlder) break;
-      }
-
-      return -1;
-    },
-    [loadOlderMessages]
-  );
 
   const handleJumpToMessage = useCallback(
     async (messageId) => {
