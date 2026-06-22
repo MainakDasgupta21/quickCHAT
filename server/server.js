@@ -9,10 +9,14 @@ import { connectDB } from "./lib/db.js";
 import userRouter from "./routes/userRoutes.js";
 import messageRouter from "./routes/messageRoutes.js";
 import conversationRouter from "./routes/conversationRoutes.js";
+import pushRouter from "./routes/pushRoutes.js";
+import reportRouter from "./routes/reportRoutes.js";
+import uploadRouter from "./routes/uploadRoutes.js";
 import Message from "./models/message.js";
 import Conversation from "./models/Conversation.js";
 import User from "./models/User.js";
 import { getConversationRoomName } from "./lib/conversationHelpers.js";
+import { startMessageScheduler } from "./lib/messageScheduler.js";
 import { Server } from "socket.io"
 
 
@@ -148,6 +152,7 @@ const markPendingDelivered = async (receiverId) => {
                         receiverId,
                         seen: false,
                         status: "sent",
+                        scheduledStatus: { $ne: "pending" },
                 })
                         .select("_id senderId")
                         .lean();
@@ -353,9 +358,13 @@ app.use("/api/status", (req, res) => res.send("Server is live"));
 app.use("/api/auth", userRouter);
 app.use("/api/messages", messageRouter);
 app.use("/api/conversations", conversationRouter);
+app.use("/api/reports", reportRouter);
+app.use("/api/push", pushRouter);
+app.use("/api/upload", uploadRouter);
 
 //connect to MongoDB
 await connectDB();
+startMessageScheduler();
 
 
 if (process.env.NODE_ENV !== 'production') {

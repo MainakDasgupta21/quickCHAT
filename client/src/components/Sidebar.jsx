@@ -4,12 +4,16 @@ import toast from "react-hot-toast";
 import assets from "../assets/assets";
 import { AuthContext } from "../../context/AuthContext";
 import { ChatContext } from "../../context/ChatContext";
+import { useLocale } from "../../context/LocaleContext";
 import CreateGroupModal from "./CreateGroupModal";
 import {
   getConversationAvatar,
   getConversationPeerId,
   getConversationSearchText,
   getConversationTitle,
+  isConversationArchived,
+  isConversationMuted,
+  isConversationPinned,
   isDirectConversation,
   isGroupConversation,
   toNormalizedId,
@@ -23,6 +27,7 @@ const Sidebar = ({
   onFilteredUsersChange = () => {},
   onMenuOpenChange = () => {},
   onKeyboardUserHover,
+  onOpenStarredMessages = () => {},
 }) => {
   const {
     getConversations,
@@ -35,6 +40,7 @@ const Sidebar = ({
     setUnseenMessages,
     usersLoading = false,
     createGroupConversation,
+    updateConversationPreferences = async () => null,
   } = useContext(ChatContext);
 
   const {
@@ -42,16 +48,20 @@ const Sidebar = ({
     logout,
     onlineUsers,
     soundEnabled,
+    theme = "dark",
     toggleSound,
+    toggleTheme = () => {},
     notificationPermission,
     requestNotificationPermission,
   } = useContext(AuthContext);
 
   const navigate = useNavigate();
+  const { isRtl, locale, setLocale, t } = useLocale();
   const [input, setInput] = useState("");
   const [menuOpen, setMenuOpen] = useState(false);
   const [isCreateGroupOpen, setIsCreateGroupOpen] = useState(false);
   const [isCreatingGroup, setIsCreatingGroup] = useState(false);
+  const [showArchivedConversations, setShowArchivedConversations] = useState(false);
   const menuRef = useRef(null);
   const searchInputRef = useRef(null);
   const menuTriggerRef = useRef(null);
@@ -59,13 +69,23 @@ const Sidebar = ({
   const hasFetchedConversationsRef = useRef(false);
   const knownUserIdsRef = useRef(new Set());
 
+  const visibleConversations = useMemo(
+    () =>
+      conversations.filter((conversation) =>
+        showArchivedConversations
+          ? isConversationArchived(conversation)
+          : !isConversationArchived(conversation)
+      ),
+    [conversations, showArchivedConversations]
+  );
+
   const filteredConversations = useMemo(() => {
-    if (!input.trim()) return conversations;
+    if (!input.trim()) return visibleConversations;
     const lowered = input.toLowerCase();
-    return conversations.filter((conversation) =>
+    return visibleConversations.filter((conversation) =>
       getConversationSearchText(conversation).toLowerCase().includes(lowered)
     );
-  }, [conversations, input]);
+  }, [input, visibleConversations]);
 
   useEffect(() => {
     const knownUserIds = new Set();
@@ -191,14 +211,25 @@ const Sidebar = ({
     });
     if (createdConversation) {
       setIsCreateGroupOpen(false);
-      toast.success("Group created");
+      toast.success(t("sidebar.groupCreated"));
     }
     setIsCreatingGroup(false);
   };
 
+  const toggleSelectedConversationArchive = async () => {
+    const selectedConversationId = toNormalizedId(selectedConversation?._id);
+    if (!selectedConversationId) return;
+    await updateConversationPreferences(selectedConversationId, {
+      isArchived: !selectedConversation?.isArchived,
+    });
+    setMenuOpen(false);
+  };
+
   return (
     <div
-      className={`h-full px-4 py-5 lg:px-5 lg:py-6 border-r border-white/10 bg-[linear-gradient(180deg,rgba(132,123,194,0.1),rgba(20,18,33,0.65))] text-white overflow-y-auto ${
+      className={`h-full px-4 py-5 lg:px-5 lg:py-6 border-white/10 ${
+        isRtl ? "border-l" : "border-r"
+      } bg-[linear-gradient(180deg,rgba(132,123,194,0.1),rgba(20,18,33,0.65))] text-white overflow-y-auto ${
         selectedConversation ? "max-md:hidden" : ""
       }`}
     >
@@ -211,7 +242,7 @@ const Sidebar = ({
               className="max-w-36 sm:max-w-40"
             />
             <p className="text-[11px] sm:text-xs text-white/60 mt-2">
-              Instant conversations, elevated.
+              {t("sidebar.tagline")}
             </p>
           </div>
           <div className="relative" ref={menuRef}>
@@ -223,7 +254,7 @@ const Sidebar = ({
               aria-expanded={menuOpen}
               aria-controls="sidebar-actions-menu"
               className="icon-btn"
-              aria-label="Open sidebar actions"
+              aria-label={t("sidebar.openSidebarActions")}
             >
               <img
                 src={assets.menu_icon}
@@ -235,16 +266,47 @@ const Sidebar = ({
               <div
                 id="sidebar-actions-menu"
                 role="menu"
-                className="absolute top-12 right-0 z-20 w-56 p-2 menu-surface animate-slide-up"
+                className={`absolute top-12 z-20 w-56 p-2 menu-surface animate-slide-up ${
+                  isRtl ? "left-0" : "right-0"
+                }`}
               >
                 <button
                   type="button"
                   role="menuitem"
                   onClick={openCreateGroupModal}
-                  className="w-full text-left px-3 py-2 rounded-lg text-sm hover:bg-white/10 flex items-center gap-2"
+                  className="w-full text-start px-3 py-2 rounded-lg text-sm hover:bg-white/10 flex items-center gap-2"
                 >
                   <span className="h-2 w-2 rounded-full bg-brand-300" />
-                  New Group
+                  {t("sidebar.newGroup")}
+                </button>
+                <button
+                  type="button"
+                  role="menuitem"
+                  onClick={() => {
+                    setMenuOpen(false);
+                    onOpenStarredMessages();
+                  }}
+                  className="w-full text-start px-3 py-2 rounded-lg text-sm hover:bg-white/10 flex items-center gap-2"
+                >
+                  <span className="h-2 w-2 rounded-full bg-brand-300" />
+                  {t("sidebar.starredMessages")}
+                </button>
+                <button
+                  type="button"
+                  role="menuitem"
+                  onClick={toggleSelectedConversationArchive}
+                  disabled={!selectedConversation?._id}
+                  className="w-full text-start px-3 py-2 rounded-lg text-sm hover:bg-white/10 disabled:opacity-45 disabled:cursor-not-allowed flex items-center justify-between gap-2"
+                >
+                  <span className="flex items-center gap-2">
+                    <span className="h-2 w-2 rounded-full bg-brand-300" />
+                    {selectedConversation?.isArchived
+                      ? t("sidebar.unarchiveChat")
+                      : t("sidebar.archiveChat")}
+                  </span>
+                  {!selectedConversation?._id && (
+                    <span className="text-[10px] text-white/55">{t("common.selectChat")}</span>
+                  )}
                 </button>
                 <button
                   type="button"
@@ -253,37 +315,65 @@ const Sidebar = ({
                     setMenuOpen(false);
                     navigate("/profile");
                   }}
-                  className="w-full text-left px-3 py-2 rounded-lg text-sm hover:bg-white/10 flex items-center gap-2"
+                  className="w-full text-start px-3 py-2 rounded-lg text-sm hover:bg-white/10 flex items-center gap-2"
                 >
                   <span className="h-2 w-2 rounded-full bg-brand-300" />
-                  Edit Profile
+                  {t("sidebar.editProfile")}
+                </button>
+                <button
+                  type="button"
+                  role="menuitem"
+                  onClick={() => toggleTheme()}
+                  className="w-full text-start px-3 py-2 rounded-lg text-sm hover:bg-white/10 flex items-center justify-between gap-2"
+                >
+                  <span className="flex items-center gap-2">
+                    <span className="h-2 w-2 rounded-full bg-brand-300" />
+                    {t("sidebar.theme")}
+                  </span>
+                  <span className="text-xs text-white/60">
+                    {theme === "light" ? t("sidebar.light") : t("sidebar.dark")}
+                  </span>
                 </button>
                 <button
                   type="button"
                   role="menuitem"
                   onClick={() => toggleSound()}
-                  className="w-full text-left px-3 py-2 rounded-lg text-sm hover:bg-white/10 flex items-center justify-between gap-2"
+                  className="w-full text-start px-3 py-2 rounded-lg text-sm hover:bg-white/10 flex items-center justify-between gap-2"
                 >
                   <span className="flex items-center gap-2">
                     <span className="h-2 w-2 rounded-full bg-brand-300" />
-                    Sound
+                    {t("sidebar.sound")}
                   </span>
                   <span className="text-xs text-white/60">
-                    {soundEnabled ? "On" : "Off"}
+                    {soundEnabled ? t("common.on") : t("common.off")}
                   </span>
                 </button>
                 <button
                   type="button"
                   role="menuitem"
                   onClick={() => requestNotificationPermission()}
-                  className="w-full text-left px-3 py-2 rounded-lg text-sm hover:bg-white/10 flex items-center justify-between gap-2"
+                  className="w-full text-start px-3 py-2 rounded-lg text-sm hover:bg-white/10 flex items-center justify-between gap-2"
                 >
                   <span className="flex items-center gap-2">
                     <span className="h-2 w-2 rounded-full bg-brand-300" />
-                    Notifications
+                    {t("sidebar.notifications")}
                   </span>
                   <span className="text-xs text-white/60">
                     {notificationPermission}
+                  </span>
+                </button>
+                <button
+                  type="button"
+                  role="menuitem"
+                  onClick={() => setLocale(locale === "ar" ? "en" : "ar")}
+                  className="w-full text-start px-3 py-2 rounded-lg text-sm hover:bg-white/10 flex items-center justify-between gap-2"
+                >
+                  <span className="flex items-center gap-2">
+                    <span className="h-2 w-2 rounded-full bg-brand-300" />
+                    {t("language.label")}
+                  </span>
+                  <span className="text-xs text-white/60">
+                    {locale === "ar" ? t("language.arabic") : t("language.english")}
                   </span>
                 </button>
                 <button
@@ -293,10 +383,10 @@ const Sidebar = ({
                     setMenuOpen(false);
                     logout();
                   }}
-                  className="w-full text-left px-3 py-2 rounded-lg text-sm hover:bg-white/10 text-rose-200 flex items-center gap-2"
+                  className="w-full text-start px-3 py-2 rounded-lg text-sm hover:bg-white/10 text-rose-200 flex items-center gap-2"
                 >
                   <span className="h-2 w-2 rounded-full bg-rose-400" />
-                  Log out
+                  {t("sidebar.logout")}
                 </button>
               </div>
             )}
@@ -310,7 +400,7 @@ const Sidebar = ({
             className="w-3 opacity-75"
           />
           <label htmlFor="conversation-search" className="sr-only">
-            Search conversations
+            {t("sidebar.searchConversations")}
           </label>
           <input
             id="conversation-search"
@@ -319,7 +409,7 @@ const Sidebar = ({
             onChange={(event) => setInput(event.target.value)}
             type="text"
             className="field-input text-sm flex-1"
-            placeholder="Search conversations..."
+            placeholder={t("sidebar.searchConversationsPlaceholder")}
           />
           {input && (
             <button
@@ -327,13 +417,30 @@ const Sidebar = ({
               onClick={() => setInput("")}
               className="text-white/50 text-sm hover:text-white"
             >
-              Clear
+              {t("common.clear")}
             </button>
           )}
         </div>
       </div>
 
-      <div className="mt-4 space-y-1" role="list" aria-label="Conversations">
+      <div className="mt-4 space-y-1" role="list" aria-label={t("sidebar.searchConversations")}>
+        {!usersLoading && (
+          <div className="pb-2 px-1 flex items-center justify-end">
+            <button
+              type="button"
+              onClick={() =>
+                setShowArchivedConversations((previousValue) => !previousValue)
+              }
+              className="text-[11px] px-2.5 py-1 rounded-full border border-white/16 bg-white/6 hover:bg-white/10 text-white/75"
+              aria-pressed={showArchivedConversations}
+            >
+              {showArchivedConversations
+                ? t("sidebar.showActiveChats")
+                : t("sidebar.showArchivedChats")}
+            </button>
+          </div>
+        )}
+
         {usersLoading &&
           Array.from({ length: 7 }).map((_, index) => (
             <div key={index} className="flex items-center gap-3 px-2 py-3">
@@ -347,9 +454,9 @@ const Sidebar = ({
 
         {!usersLoading && filteredConversations.length === 0 && (
           <div className="glass-subtle border border-white/10 rounded-2xl p-5 text-center text-sm text-white/70">
-            <p className="font-medium text-white/85">No conversations found</p>
+            <p className="font-medium text-white/85">{t("sidebar.noConversationsFound")}</p>
             <p className="mt-1 text-xs text-white/55">
-              Try a different search or create a group.
+              {t("sidebar.tryDifferentSearch")}
             </p>
           </div>
         )}
@@ -368,13 +475,17 @@ const Sidebar = ({
             const isActive =
               toNormalizedId(selectedConversation?._id) === conversationId;
             const unreadCount = Number(unseenMessages[conversationId] || 0);
+            const isPinnedConversation = isConversationPinned(conversation);
+            const isMutedConversation = isConversationMuted(conversation);
             const title = getConversationTitle(conversation);
             const subtitle = conversation.lastMessagePreview
               ? conversation.lastMessagePreview
               : isGroupConversation(conversation)
-                ? `${Math.max((conversation.participants || []).length - 1, 0)} members`
+                ? t("common.membersCount", {
+                    count: Math.max((conversation.participants || []).length - 1, 0),
+                  })
                 : directOnline
-                  ? "Online now"
+                  ? t("common.onlineNow")
                   : formatLastSeen(conversation.peer?.lastSeen);
 
             return (
@@ -383,7 +494,9 @@ const Sidebar = ({
                 key={conversationId}
                 role="listitem"
                 aria-current={isActive ? "true" : undefined}
-                aria-label={`${title}${unreadCount ? `, ${unreadCount} unread` : ""}`}
+                aria-label={`${title}${
+                  unreadCount ? t("sidebar.ariaUnreadSuffix", { count: unreadCount }) : ""
+                }`}
                 onClick={() => {
                   setSelectedConversation(conversation);
                   setUnseenMessages((previousUnseenMessages) => ({
@@ -394,11 +507,13 @@ const Sidebar = ({
                 onMouseEnter={() => onKeyboardUserHover?.(conversationId)}
                 onFocus={() => onKeyboardUserHover?.(conversationId)}
                 style={{ animationDelay: `${index * 28}ms` }}
-                className={`w-full relative flex items-center gap-3 p-2.5 pr-3 rounded-2xl cursor-pointer text-left transition-all duration-200 border ${
+                className={`w-full relative flex items-center gap-3 p-2.5 rounded-2xl cursor-pointer text-start transition-all duration-200 border ${
                   isActive
                     ? "bg-white/10 border-brand-300/40 shadow-soft"
                     : "border-transparent hover:bg-white/7 hover:border-white/10"
-                } ${keyboardUserId === conversationId && !isActive ? "border-brand-300/25 bg-white/[0.04]" : ""} stagger-item`}
+                } ${keyboardUserId === conversationId && !isActive ? "border-brand-300/25 bg-white/[0.04]" : ""} ${
+                  isMutedConversation ? "opacity-80" : ""
+                } ${isRtl ? "pl-3" : "pr-3"} stagger-item`}
               >
                 <div className="relative">
                   <img
@@ -426,11 +541,29 @@ const Sidebar = ({
                   <p className="truncate text-sm font-medium tracking-wide">{title}</p>
                   <p className="text-xs text-white/55 truncate mt-0.5">{subtitle}</p>
                 </div>
-                {unreadCount > 0 && (
-                  <span className="text-[11px] min-w-5 h-5 px-1.5 flex justify-center items-center rounded-full btn-gradient">
-                    {unreadCount}
-                  </span>
-                )}
+                <div className="flex items-center gap-1.5">
+                  {isMutedConversation && (
+                    <span className="text-[10px] px-1.5 py-0.5 rounded-full border border-white/20 bg-white/8 text-white/70">
+                      {t("common.mutedBadge")}
+                    </span>
+                  )}
+                  {isPinnedConversation && (
+                    <span className="text-[10px] px-1.5 py-0.5 rounded-full border border-brand-200/35 bg-brand-500/20 text-brand-100">
+                      {t("common.pinBadge")}
+                    </span>
+                  )}
+                  {unreadCount > 0 && (
+                    <span
+                      className={`text-[11px] min-w-5 h-5 px-1.5 flex justify-center items-center rounded-full ${
+                        isMutedConversation
+                          ? "border border-white/20 bg-white/10 text-white/85"
+                          : "btn-gradient"
+                      }`}
+                    >
+                      {unreadCount}
+                    </span>
+                  )}
+                </div>
               </button>
             );
           })}
@@ -441,8 +574,8 @@ const Sidebar = ({
         onClose={() => setIsCreateGroupOpen(false)}
         contacts={contacts}
         onSubmit={handleCreateGroup}
-        title="Create group"
-        submitLabel="Create"
+        title={t("sidebar.newGroup")}
+        submitLabel={t("common.submit")}
         showGroupName
         isSubmitting={isCreatingGroup}
         excludedUserIds={[authUser?._id]}

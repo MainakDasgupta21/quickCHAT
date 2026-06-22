@@ -1,5 +1,15 @@
+import {
+  formatLocalizedNumber,
+  getRuntimeIntlLocale,
+  translate,
+} from "../i18n/runtime";
+
+const toIntlLocale = () => getRuntimeIntlLocale();
+
 export function formatMessageTime(date) {
-  return new Date(date).toLocaleTimeString("en-US", {
+  const parsedDate = new Date(date);
+  if (Number.isNaN(parsedDate.getTime())) return "";
+  return parsedDate.toLocaleTimeString(toIntlLocale(), {
     hour: "2-digit",
     minute: "2-digit",
     hour12: false,
@@ -17,10 +27,10 @@ export function formatDateDividerLabel(date) {
     a.getMonth() === b.getMonth() &&
     a.getFullYear() === b.getFullYear();
 
-  if (isSameDate(messageDate, today)) return "Today";
-  if (isSameDate(messageDate, yesterday)) return "Yesterday";
+  if (isSameDate(messageDate, today)) return translate("common.today");
+  if (isSameDate(messageDate, yesterday)) return translate("common.yesterday");
 
-  return messageDate.toLocaleDateString("en-US", {
+  return messageDate.toLocaleDateString(toIntlLocale(), {
     month: "short",
     day: "numeric",
     year: "numeric",
@@ -37,15 +47,19 @@ export function formatFileSize(bytes) {
 
 export function formatDuration(seconds = 0) {
   const totalSeconds = Math.max(0, Math.floor(seconds));
-  const mins = String(Math.floor(totalSeconds / 60)).padStart(2, "0");
-  const secs = String(totalSeconds % 60).padStart(2, "0");
-  return `${mins}:${secs}`;
+  const mins = Math.floor(totalSeconds / 60);
+  const secs = totalSeconds % 60;
+  const numberFormatter = new Intl.NumberFormat(toIntlLocale(), {
+    minimumIntegerDigits: 2,
+    useGrouping: false,
+  });
+  return `${numberFormatter.format(mins)}:${numberFormatter.format(secs)}`;
 }
 
 // Extracts the most useful, human-readable message from an Axios/network error.
 // The API returns actionable messages in `response.data.message`; falling back to
 // `error.message` (e.g. "Request failed with status code 400") loses that context.
-export function getErrorMessage(error, fallback = "Something went wrong. Please try again.") {
+export function getErrorMessage(error, fallback = translate("common.errorGeneric")) {
   return (
     error?.response?.data?.message ||
     error?.message ||
@@ -63,13 +77,16 @@ export function createClientId() {
 }
 
 const formatTimeForLastSeen = (date) =>
-  date.toLocaleTimeString("en-US", {
+  date.toLocaleTimeString(toIntlLocale(), {
     hour: "2-digit",
     minute: "2-digit",
     hour12: false,
   });
 
-export function formatLastSeen(lastSeenValue, fallback = "Last seen recently") {
+export function formatLastSeen(
+  lastSeenValue,
+  fallback = translate("common.time.lastSeenFallback")
+) {
   if (!lastSeenValue) return fallback;
 
   const lastSeen = new Date(lastSeenValue);
@@ -78,29 +95,90 @@ export function formatLastSeen(lastSeenValue, fallback = "Last seen recently") {
   const now = new Date();
   const diffMs = now.getTime() - lastSeen.getTime();
   if (diffMs <= 0 || diffMs < 60 * 1000) {
-    return "Last seen just now";
+    return translate("common.time.lastSeenJustNow");
   }
 
   const diffMinutes = Math.floor(diffMs / (60 * 1000));
   if (diffMinutes < 60) {
-    return `Last seen ${diffMinutes}m ago`;
+    return translate("common.time.lastSeenMinutesAgo", {
+      count: formatLocalizedNumber(diffMinutes),
+    });
   }
 
   const diffHours = Math.floor(diffMinutes / 60);
   if (now.toDateString() === lastSeen.toDateString()) {
-    return `Last seen ${diffHours}h ago`;
+    return translate("common.time.lastSeenHoursAgo", {
+      count: formatLocalizedNumber(diffHours),
+    });
   }
 
   const yesterday = new Date(now);
   yesterday.setDate(now.getDate() - 1);
   if (yesterday.toDateString() === lastSeen.toDateString()) {
-    return `Last seen yesterday at ${formatTimeForLastSeen(lastSeen)}`;
+    return translate("common.time.lastSeenYesterdayAt", {
+      time: formatTimeForLastSeen(lastSeen),
+    });
   }
 
-  return `Last seen ${lastSeen.toLocaleDateString("en-US", {
-    month: "short",
-    day: "numeric",
-  })} at ${formatTimeForLastSeen(lastSeen)}`;
+  return translate("common.time.lastSeenAtDate", {
+    date: lastSeen.toLocaleDateString(toIntlLocale(), {
+      month: "short",
+      day: "numeric",
+    }),
+    time: formatTimeForLastSeen(lastSeen),
+  });
+}
+
+export function formatRelativeDurationShort(remainingMs) {
+  const safeMs = Math.max(0, Number(remainingMs) || 0);
+  const totalSeconds = Math.floor(safeMs / 1000);
+
+  if (totalSeconds < 60) {
+    return translate("common.time.secondsShort", {
+      count: formatLocalizedNumber(totalSeconds),
+    });
+  }
+
+  const totalMinutes = Math.floor(totalSeconds / 60);
+  if (totalMinutes < 60) {
+    const remainderSeconds = totalSeconds % 60;
+    if (remainderSeconds > 0) {
+      return translate("common.time.minutesSecondsShort", {
+        minutes: formatLocalizedNumber(totalMinutes),
+        seconds: formatLocalizedNumber(remainderSeconds),
+      });
+    }
+    return translate("common.time.minutesShort", {
+      count: formatLocalizedNumber(totalMinutes),
+    });
+  }
+
+  const totalHours = Math.floor(totalMinutes / 60);
+  if (totalHours < 24) {
+    const remainderMinutes = totalMinutes % 60;
+    if (remainderMinutes > 0) {
+      return translate("common.time.hoursMinutesShort", {
+        hours: formatLocalizedNumber(totalHours),
+        minutes: formatLocalizedNumber(remainderMinutes),
+      });
+    }
+    return translate("common.time.hoursShort", {
+      count: formatLocalizedNumber(totalHours),
+    });
+  }
+
+  const totalDays = Math.floor(totalHours / 24);
+  const remainderHours = totalHours % 24;
+  if (remainderHours > 0) {
+    return translate("common.time.daysHoursShort", {
+      days: formatLocalizedNumber(totalDays),
+      hours: formatLocalizedNumber(remainderHours),
+    });
+  }
+  return translate("common.time.daysShort", {
+    count: formatLocalizedNumber(totalDays),
+  });
 }
 
 export const MAX_IMAGE_UPLOAD_BYTES = 5 * 1024 * 1024; // 5MB raw (~6.85MB once base64-encoded)
+export const MAX_ATTACHMENT_UPLOAD_BYTES = 25 * 1024 * 1024; // 25MB for direct upload attachments

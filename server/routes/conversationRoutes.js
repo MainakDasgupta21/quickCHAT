@@ -11,6 +11,7 @@ import {
   leaveConversation,
   removeConversationMember,
   updateConversation,
+  updateConversationPreferences,
 } from "../controllers/conversationController.js";
 import {
   getMessages,
@@ -26,6 +27,7 @@ conversationRouter.get("/:id", protectRoute, getConversationById);
 conversationRouter.post("/group", protectRoute, createGroupConversation);
 conversationRouter.post("/direct/:id", protectRoute, getOrCreateDirectConversationByUser);
 conversationRouter.patch("/:id", protectRoute, updateConversation);
+conversationRouter.patch("/:id/preferences", protectRoute, updateConversationPreferences);
 conversationRouter.post("/:id/members", protectRoute, addConversationMembers);
 conversationRouter.delete(
   "/:id/members/:userId",

@@ -1,10 +1,11 @@
 import React from "react";
 import assets from "../assets/assets";
+import { translate } from "../i18n/runtime";
 
 // Branded full-screen loading state used while the persisted session is being
 // validated and while lazily-loaded routes resolve. Prevents a flash of the
 // login screen for users who are already authenticated.
-const AppSplash = ({ label = "Loading quickCHAT..." }) => (
+const AppSplash = ({ label = translate("app.splashLoading") }) => (
   <div
     role="status"
     aria-live="polite"

@@ -14,6 +14,9 @@ const participantSchema = new mongoose.Schema(
     },
     joinedAt: { type: Date, default: Date.now },
     lastReadAt: { type: Date, default: null },
+    isPinned: { type: Boolean, default: false },
+    isArchived: { type: Boolean, default: false },
+    mutedUntil: { type: Date, default: null },
   },
   { _id: false }
 );

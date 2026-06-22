@@ -9,11 +9,16 @@ import {
 } from "react";
 import toast from "react-hot-toast";
 import { AuthContext } from "./AuthContext";
+import { useLocale } from "./LocaleContext";
 import { createClientId, getErrorMessage } from "../src/lib/utils";
+import { stripMarkdownForPreview } from "../src/lib/messageTextPreview";
+import { translate } from "../src/i18n/runtime";
 import {
   getConversationPeerId,
   getConversationTitle,
   getMessagePreview,
+  isMessagePendingRelease,
+  isConversationMuted,
   isDirectConversation,
   isGroupConversation,
   mapLegacyUsersToConversations,
@@ -27,16 +32,31 @@ export const ChatContext = createContext();
 const MAX_AUTO_RETRIES = 2;
 const RETRY_DELAYS_MS = [800, 1600];
 const MESSAGES_PAGE_SIZE = 40;
+const MAX_MESSAGES_PAGE_SIZE = 100;
+const DEFAULT_GLOBAL_SEARCH_LIMIT = 60;
+const SCHEDULE_IMMEDIATE_THRESHOLD_MS = 1000;
 
 const delay = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 const shouldAutoRetrySend = (error) =>
   !error?.response || Number(error.response.status) >= 500;
+const toRequestedMessagesPageSize = (value) => {
+  const parsed = Number.parseInt(value, 10);
+  if (!Number.isFinite(parsed) || parsed <= 0) return MESSAGES_PAGE_SIZE;
+  return Math.min(parsed, MAX_MESSAGES_PAGE_SIZE);
+};
 
 const toMessageIdentity = (message) => {
   if (!message) return "";
   if (message._id) return `id:${String(message._id)}`;
   if (message.clientId) return `client:${String(message.clientId)}`;
   return "";
+};
+
+const toActiveMutedUntil = (mutedUntilValue) => {
+  if (!mutedUntilValue) return null;
+  const mutedUntilDate = new Date(mutedUntilValue);
+  if (Number.isNaN(mutedUntilDate.getTime())) return null;
+  return mutedUntilDate.getTime() > Date.now() ? mutedUntilDate.toISOString() : null;
 };
 
 const prependUniqueMessages = (incomingMessages, existingMessages) => {
@@ -59,28 +79,67 @@ const buildOptimisticMessage = ({
   conversationId,
 }) => {
   const createdAt = new Date().toISOString();
+  const parsedSendAtMs = new Date(messageData?.sendAt || "").getTime();
+  const isScheduledSend =
+    Number.isFinite(parsedSendAtMs) &&
+    parsedSendAtMs - Date.now() > SCHEDULE_IMMEDIATE_THRESHOLD_MS;
+  const disappearAfterMs = Number.parseInt(messageData?.disappearAfterMs, 10);
+  const hasDisappearAfter =
+    Number.isFinite(disappearAfterMs) && disappearAfterMs > 0;
+  const releasedAt = isScheduledSend ? null : createdAt;
+  const expiresAt =
+    !isScheduledSend && hasDisappearAfter
+      ? new Date(new Date(createdAt).getTime() + disappearAfterMs).toISOString()
+      : null;
+  const imageInput = messageData?.image;
+  const fileInput = messageData?.file;
+  const audioInput = messageData?.audio;
+  const imageUrl =
+    typeof imageInput === "string"
+      ? imageInput
+      : imageInput?.url || imageInput?.data || "";
+
   return {
     _id: `temp-${clientId}`,
     clientId,
     conversationId: toNormalizedId(conversationId),
     senderId,
     text: String(messageData?.text || ""),
-    image: messageData?.image || "",
-    file: messageData?.file
+    image: imageUrl,
+    imagePublicId: typeof imageInput === "object" ? imageInput?.publicId || "" : "",
+    imageResourceType:
+      typeof imageInput === "object" ? imageInput?.resourceType || "" : "",
+    file: fileInput
       ? {
-          url: messageData.file.data || "",
-          name: messageData.file.name || "Attachment",
-          type: messageData.file.type || "application/octet-stream",
-          size: Number(messageData.file.size || 0),
+          url: fileInput.url || fileInput.data || "",
+          name: fileInput.name || translate("common.attachment.attachment"),
+          type: fileInput.type || "application/octet-stream",
+          size: Number(fileInput.size || 0),
+          publicId: fileInput.publicId || "",
+          resourceType: fileInput.resourceType || "",
         }
       : null,
-    audio: messageData?.audio
+    audio: audioInput
       ? {
-          url: messageData.audio.data || "",
-          duration: Number(messageData.audio.duration || 0),
+          url: audioInput.url || audioInput.data || "",
+          duration: Number(audioInput.duration || 0),
+          publicId: audioInput.publicId || "",
+          resourceType: audioInput.resourceType || "",
         }
       : null,
     replyTo: replyToMessage || null,
+    threadRoot: toNormalizedId(
+      messageData?.threadRoot || replyToMessage?.threadRoot || replyToMessage?._id
+    ) || null,
+    replyCount: Number(messageData?.replyCount || 0),
+    mentions: toMentionIds(messageData?.mentions),
+    preview: null,
+    sendAt: isScheduledSend ? new Date(parsedSendAtMs).toISOString() : null,
+    releasedAt,
+    expiresAt,
+    disappearAfterMs: hasDisappearAfter ? disappearAfterMs : null,
+    scheduledStatus: isScheduledSend ? "pending" : "released",
+    starredBy: [],
     reactions: [],
     readBy: [{ userId: senderId, readAt: createdAt }],
     seen: false,
@@ -93,14 +152,34 @@ const buildOptimisticMessage = ({
 };
 
 const getNotificationBody = (message) =>
-  message.text ||
+  (isMessagePendingRelease(message)
+    ? translate("common.attachment.scheduledMessage")
+    : stripMarkdownForPreview(message?.text, 160)) ||
   (message.image
-    ? "Sent a photo"
+    ? translate("common.attachment.sentPhoto")
     : message.audio
-      ? "Sent a voice note"
+      ? translate("common.attachment.sentVoiceNote")
+      : message.file?.type?.startsWith("video/")
+        ? translate("common.attachment.sentVideo")
       : message.file
-        ? `Sent ${message.file.name || "a file"}`
-        : "Sent a message");
+        ? translate("common.attachment.sentFile", {
+            name: message.file.name || translate("chatContainer.fileFallback"),
+          })
+        : translate("common.attachment.sentMessage"));
+
+const toMentionIds = (mentionsValue) =>
+  Array.isArray(mentionsValue)
+    ? mentionsValue
+        .map((mention) => toNormalizedId(mention?._id || mention?.userId || mention))
+        .filter(Boolean)
+    : [];
+
+const isUserMentionedInMessage = (message, userId) => {
+  const normalizedUserId = toNormalizedId(userId);
+  if (!normalizedUserId) return false;
+  const mentionIds = toMentionIds(message?.mentions);
+  return mentionIds.includes(normalizedUserId);
+};
 
 const hasOwn = (value, key) => Object.prototype.hasOwnProperty.call(value || {}, key);
 
@@ -170,6 +249,7 @@ export const ChatProvider = ({ children }) => {
   const [oldestCursor, setOldestCursor] = useState(null);
   const [activeConversationIdForPagination, setActiveConversationIdForPagination] =
     useState(null);
+  const [pendingConversationJumpTarget, setPendingConversationJumpTarget] = useState(null);
   const [typingUsers, setTypingUsers] = useState({});
   const [replyTo, setReplyTo] = useState(null);
 
@@ -181,8 +261,39 @@ export const ChatProvider = ({ children }) => {
   const contactsRef = useRef([]);
   const pendingPayloadsRef = useRef(new Map());
 
-  const { authUser, socket, axios, showNotification, playReceiveCue, playSendCue } =
-    useContext(AuthContext);
+  const {
+    authUser,
+    socket,
+    axios,
+    showNotification,
+    playReceiveCue,
+    playSendCue,
+    blockedUserIds = [],
+    blockUser: authBlockUser = async () => false,
+    unblockUser: authUnblockUser = async () => false,
+  } = useContext(AuthContext);
+  const { t } = useLocale();
+  const getLocalizedError = useCallback(
+    (error, fallbackKey = "common.errorGeneric", params = {}) =>
+      getErrorMessage(error, t(fallbackKey, params)),
+    [t]
+  );
+  const getConversationCountLabel = useCallback(
+    (count) =>
+      count === 1
+        ? t("chat.conversationLabelSingular")
+        : t("chat.conversationLabelPlural"),
+    [t]
+  );
+  const blockedUserIdSet = useMemo(
+    () =>
+      new Set(
+        (Array.isArray(blockedUserIds) ? blockedUserIds : [])
+          .map((blockedUserId) => toNormalizedId(blockedUserId))
+          .filter(Boolean)
+      ),
+    [blockedUserIds]
+  );
 
   const normalizeConversation = useCallback((conversation) => {
     if (!conversation) return null;
@@ -235,6 +346,36 @@ export const ChatProvider = ({ children }) => {
         null;
     }
 
+    const normalizedMutedUntil = toActiveMutedUntil(conversation.mutedUntil);
+    const hasPinnedPreference = hasOwn(conversation, "isPinned");
+    const hasArchivedPreference = hasOwn(conversation, "isArchived");
+    const hasMutedUntilPreference = hasOwn(conversation, "mutedUntil");
+    const hasMutedFlag = hasOwn(conversation, "isMuted");
+    const hasBlockedFlag = hasOwn(conversation, "isBlocked");
+    const hasBlockedByMeFlag = hasOwn(conversation, "blockedByMe");
+    const hasBlockedByOtherFlag = hasOwn(conversation, "blockedByOther");
+    const resolvedIsMuted = Boolean(
+      hasMutedFlag ? conversation.isMuted : normalizedMutedUntil
+    );
+    const isDirect = isDirectConversation(conversation);
+    const resolvedBlockedByMe = isDirect
+      ? Boolean(
+          hasBlockedByMeFlag
+            ? conversation.blockedByMe
+            : peerId && blockedUserIdSet.has(peerId)
+        )
+      : false;
+    const resolvedBlockedByOther = isDirect
+      ? Boolean(hasBlockedByOtherFlag ? conversation.blockedByOther : false)
+      : false;
+    const resolvedIsBlocked = isDirect
+      ? Boolean(
+          hasBlockedFlag
+            ? conversation.isBlocked
+            : resolvedBlockedByMe || resolvedBlockedByOther
+        )
+      : false;
+
     const normalizedConversation = {
       _id: normalizedId,
       type: isGroupConversation(conversation) ? "group" : "direct",
@@ -249,11 +390,22 @@ export const ChatProvider = ({ children }) => {
       unseenCount: Number(conversation.unseenCount || 0),
       isAdmin: Boolean(conversation.isAdmin),
       createdBy: toNormalizedId(conversation.createdBy),
+      isBlocked: resolvedIsBlocked,
+      blockedByMe: resolvedBlockedByMe,
+      blockedByOther: resolvedBlockedByOther,
+      ...(hasPinnedPreference ? { isPinned: Boolean(conversation.isPinned) } : {}),
+      ...(hasArchivedPreference ? { isArchived: Boolean(conversation.isArchived) } : {}),
+      ...((hasMutedUntilPreference || hasMutedFlag)
+        ? {
+            mutedUntil: normalizedMutedUntil,
+            isMuted: resolvedIsMuted,
+          }
+        : {}),
     };
 
     normalizedConversation.title = getConversationTitle(normalizedConversation);
     return normalizedConversation;
-  }, []);
+  }, [blockedUserIdSet]);
 
   const resolveConversationByTargetId = useCallback(
     (targetId, sourceConversations = conversationsRef.current) => {
@@ -291,19 +443,53 @@ export const ChatProvider = ({ children }) => {
           ]);
         }
 
+        const previousConversation = previousConversations[existingIndex];
+        const resolvedBlockedByMe = hasOwn(normalizedIncoming, "blockedByMe")
+          ? Boolean(normalizedIncoming.blockedByMe)
+          : Boolean(previousConversation.blockedByMe);
+        const resolvedBlockedByOther = hasOwn(normalizedIncoming, "blockedByOther")
+          ? Boolean(normalizedIncoming.blockedByOther)
+          : Boolean(previousConversation.blockedByOther);
+        const resolvedIsBlocked = hasOwn(normalizedIncoming, "isBlocked")
+          ? Boolean(normalizedIncoming.isBlocked)
+          : Boolean(resolvedBlockedByMe || resolvedBlockedByOther);
+
         const mergedConversation = {
-          ...previousConversations[existingIndex],
+          ...previousConversation,
           ...normalizedIncoming,
+          lastMessagePreview:
+            normalizedIncoming.lastMessagePreview ||
+            previousConversation.lastMessagePreview ||
+            "",
+          lastMessageAt:
+            normalizedIncoming.lastMessageAt ||
+            previousConversation.lastMessageAt ||
+            null,
+          isPinned: hasOwn(normalizedIncoming, "isPinned")
+            ? Boolean(normalizedIncoming.isPinned)
+            : Boolean(previousConversation.isPinned),
+          isArchived: hasOwn(normalizedIncoming, "isArchived")
+            ? Boolean(normalizedIncoming.isArchived)
+            : Boolean(previousConversation.isArchived),
+          mutedUntil: hasOwn(normalizedIncoming, "mutedUntil")
+            ? normalizedIncoming.mutedUntil || null
+            : (previousConversation.mutedUntil ?? null),
+          isMuted: hasOwn(normalizedIncoming, "isMuted")
+            ? Boolean(normalizedIncoming.isMuted)
+            : Boolean(previousConversation.isMuted),
+          blockedByMe: resolvedBlockedByMe,
+          blockedByOther: resolvedBlockedByOther,
+          isBlocked: resolvedIsBlocked,
           participants: mergeConversationParticipants(
-            previousConversations[existingIndex].participants,
+            previousConversation.participants,
             normalizedIncoming.participants
           ),
           peer: mergeConversationPeer(
-            previousConversations[existingIndex].peer,
+            previousConversation.peer,
             normalizedIncoming.peer
           ),
           title:
-            normalizedIncoming.title || previousConversations[existingIndex].title,
+            normalizedIncoming.title || previousConversation.title,
         };
 
         const nextConversations = [...previousConversations];
@@ -407,14 +593,48 @@ export const ChatProvider = ({ children }) => {
           lastMessagePreview: conversation.lastMessagePreview || "",
           lastMessageAt: conversation.lastMessageAt || null,
           conversationId: toNormalizedId(conversation._id),
+          isBlocked: Boolean(conversation.isBlocked),
+          blockedByMe: Boolean(conversation.blockedByMe),
+          blockedByOther: Boolean(conversation.blockedByOther),
         }))
         .filter((user) => toNormalizedId(user._id)),
     [conversations]
   );
 
+  const selectedConversationBlockState = useMemo(() => {
+    const activeConversation = selectedConversation;
+    if (!isDirectConversation(activeConversation)) {
+      return {
+        isBlocked: false,
+        blockedByMe: false,
+        blockedByOther: false,
+        peerId: "",
+      };
+    }
+    const peerId = getConversationPeerId(activeConversation);
+    const blockedByMe = Boolean(
+      activeConversation?.blockedByMe || (peerId && blockedUserIdSet.has(peerId))
+    );
+    const blockedByOther = Boolean(activeConversation?.blockedByOther);
+    return {
+      peerId,
+      blockedByMe,
+      blockedByOther,
+      isBlocked: Boolean(activeConversation?.isBlocked || blockedByMe || blockedByOther),
+    };
+  }, [blockedUserIdSet, selectedConversation]);
+
   const selectedUser = useMemo(
-    () => (isDirectConversation(selectedConversation) ? selectedConversation?.peer || null : null),
-    [selectedConversation]
+    () =>
+      isDirectConversation(selectedConversation)
+        ? {
+            ...(selectedConversation?.peer || {}),
+            isBlocked: selectedConversationBlockState.isBlocked,
+            blockedByMe: selectedConversationBlockState.blockedByMe,
+            blockedByOther: selectedConversationBlockState.blockedByOther,
+          }
+        : null,
+    [selectedConversation, selectedConversationBlockState]
   );
 
   useEffect(() => {
@@ -445,6 +665,9 @@ export const ChatProvider = ({ children }) => {
       profilePic: contact?.profilePic || "",
       bio: contact?.bio || "",
       lastSeen: contact?.lastSeen || null,
+      isBlocked: Boolean(contact?.isBlocked),
+      blockedByMe: Boolean(contact?.blockedByMe),
+      blockedByOther: Boolean(contact?.blockedByOther),
     });
 
     try {
@@ -456,7 +679,7 @@ export const ChatProvider = ({ children }) => {
         setContacts(normalizedContacts);
         return normalizedContacts;
       }
-      throw new Error(data.message || "Could not load contacts");
+      throw new Error(data.message || t("chat.loadContactsFailed"));
     } catch {
       try {
         const { data } = await axios.get("/api/messages/users");
@@ -466,11 +689,11 @@ export const ChatProvider = ({ children }) => {
         setContacts(normalizedContacts);
         return normalizedContacts;
       } catch (fallbackError) {
-        toast.error(getErrorMessage(fallbackError));
+        toast.error(getLocalizedError(fallbackError, "chat.loadContactsFailed"));
         return [];
       }
     }
-  }, [axios]);
+  }, [axios, getLocalizedError, t]);
 
   const getConversations = useCallback(async () => {
     if (!hasLoadedConversationsRef.current) {
@@ -500,12 +723,12 @@ export const ChatProvider = ({ children }) => {
         return;
       }
 
-      throw new Error(data.message || "Could not load conversations");
+      throw new Error(data.message || t("chat.loadConversationsFailed"));
     } catch {
       try {
         const { data } = await axios.get("/api/messages/users");
         if (!data.success) {
-          toast.error(data.message || "Could not load conversations");
+          toast.error(data.message || t("chat.loadConversationsFailed"));
           return;
         }
 
@@ -526,13 +749,13 @@ export const ChatProvider = ({ children }) => {
         });
         setUnseenMessages(normalizedUnseenMessages);
       } catch (fallbackError) {
-        toast.error(getErrorMessage(fallbackError));
+        toast.error(getLocalizedError(fallbackError, "chat.loadConversationsFailed"));
       }
     } finally {
       hasLoadedConversationsRef.current = true;
       setUsersLoading(false);
     }
-  }, [axios, normalizeConversation]);
+  }, [axios, getLocalizedError, normalizeConversation, t]);
 
   const getUsers = getConversations;
 
@@ -546,7 +769,7 @@ export const ChatProvider = ({ children }) => {
           `/api/conversations/direct/${normalizedPeerUserId}`
         );
         if (!data.success || !data.conversation) {
-          toast.error(data.message || "Could not open conversation");
+          toast.error(data.message || t("chat.openConversationFailed"));
           return null;
         }
 
@@ -560,11 +783,11 @@ export const ChatProvider = ({ children }) => {
         }));
         return normalizedConversation;
       } catch (error) {
-        toast.error(getErrorMessage(error));
+        toast.error(getLocalizedError(error, "chat.openConversationFailed"));
         return null;
       }
     },
-    [axios, normalizeConversation, upsertConversation]
+    [axios, getLocalizedError, normalizeConversation, t, upsertConversation]
   );
 
   const setSelectedUser = useCallback(
@@ -608,9 +831,14 @@ export const ChatProvider = ({ children }) => {
   );
 
   const getMessages = useCallback(
-    async (targetId) => {
+    async (targetId, options = {}) => {
       const normalizedTargetId = toNormalizedId(targetId);
-      if (!normalizedTargetId) return;
+      if (!normalizedTargetId) {
+        return { success: false };
+      }
+      const requestedPageSize = toRequestedMessagesPageSize(options.limit);
+      const aroundMessageId = toNormalizedId(options.aroundMessageId);
+      const forceLoad = Boolean(options.force);
 
       setMessagesLoading(true);
       setReplyTo(null);
@@ -621,7 +849,10 @@ export const ChatProvider = ({ children }) => {
 
       try {
         const { data } = await axios.get(`/api/messages/${normalizedTargetId}`, {
-          params: { limit: MESSAGES_PAGE_SIZE },
+          params: {
+            limit: requestedPageSize,
+            aroundMessageId: aroundMessageId || undefined,
+          },
         });
 
         const serverConversationId = toNormalizedId(
@@ -632,12 +863,13 @@ export const ChatProvider = ({ children }) => {
         const activePeerId = getConversationPeerId(activeConversation);
 
         const stillActive =
+          forceLoad ||
           !activeConversationId ||
           [normalizedTargetId, serverConversationId].includes(activeConversationId) ||
           [normalizedTargetId, serverConversationId].includes(activePeerId);
 
         if (!stillActive) {
-          return;
+          return { success: false };
         }
 
         if (data.success) {
@@ -678,14 +910,23 @@ export const ChatProvider = ({ children }) => {
             }
             socket.emit("messagesSeen", payload);
           }
+
+          return {
+            success: true,
+            conversationId: serverConversationId,
+            anchorMessageId: toNormalizedId(data.anchorMessageId),
+          };
         }
+
+        return { success: false };
       } catch (error) {
-        toast.error(getErrorMessage(error));
+        toast.error(getLocalizedError(error, "chat.loadMessagesFailed"));
+        return { success: false, message: getLocalizedError(error, "chat.loadMessagesFailed") };
       } finally {
         setMessagesLoading(false);
       }
     },
-    [axios, reconcileConversationIdentity, socket]
+    [axios, getLocalizedError, reconcileConversationIdentity, socket]
   );
 
   const loadOlderMessages = useCallback(async () => {
@@ -743,7 +984,7 @@ export const ChatProvider = ({ children }) => {
       setActiveConversationIdForPagination(serverConversationId);
       return olderMessages.length > 0;
     } catch (error) {
-      toast.error(getErrorMessage(error));
+      toast.error(getLocalizedError(error, "chat.loadMessagesFailed"));
       return false;
     } finally {
       setLoadingOlderMessages(false);
@@ -751,6 +992,7 @@ export const ChatProvider = ({ children }) => {
   }, [
     activeConversationIdForPagination,
     axios,
+    getLocalizedError,
     hasMoreMessages,
     loadingOlderMessages,
     oldestCursor,
@@ -801,7 +1043,7 @@ export const ChatProvider = ({ children }) => {
             message.clientId === clientId ? { ...message, status: "failed" } : message
           )
         );
-        toast.error(data.message || "Could not send message");
+        toast.error(data.message || t("chat.sendMessageFailed"));
         return false;
       } catch (error) {
         if (attempt < MAX_AUTO_RETRIES && shouldAutoRetrySend(error)) {
@@ -818,17 +1060,38 @@ export const ChatProvider = ({ children }) => {
             message.clientId === clientId ? { ...message, status: "failed" } : message
           )
         );
-        toast.error(getErrorMessage(error));
+        toast.error(getLocalizedError(error, "chat.sendMessageFailed"));
         return false;
       }
     },
-    [axios, bumpConversationPreview, reconcileConversationIdentity]
+    [axios, bumpConversationPreview, getLocalizedError, reconcileConversationIdentity, t]
   );
 
   const sendMessage = useCallback(
-    (messageData) => {
+    async (messageData) => {
       const activeConversation = selectedConversationRef.current;
-      if (!activeConversation?._id || !authUser?._id) return;
+      if (!activeConversation?._id || !authUser?._id) return false;
+
+      if (isDirectConversation(activeConversation)) {
+        const activePeerId = getConversationPeerId(activeConversation);
+        const blockedByMe = Boolean(
+          activeConversation?.blockedByMe ||
+            (activePeerId && blockedUserIdSet.has(activePeerId))
+        );
+        const blockedByOther = Boolean(activeConversation?.blockedByOther);
+        const isBlocked = Boolean(
+          activeConversation?.isBlocked || blockedByMe || blockedByOther
+        );
+
+        if (isBlocked) {
+          toast.error(
+            blockedByMe
+              ? t("chat.blockedByMeSendError")
+              : t("chat.blockedByOtherSendError")
+          );
+          return false;
+        }
+      }
 
       const conversationId = toNormalizedId(activeConversation._id);
       const peerId = getConversationPeerId(activeConversation);
@@ -839,6 +1102,10 @@ export const ChatProvider = ({ children }) => {
         file: messageData?.file,
         audio: messageData?.audio,
         replyTo: messageData?.replyTo,
+        threadRoot: messageData?.threadRoot,
+        mentions: toMentionIds(messageData?.mentions),
+        sendAt: messageData?.sendAt || null,
+        disappearAfterMs: messageData?.disappearAfterMs ?? null,
       };
       const replyToMessage =
         payload.replyTo &&
@@ -862,8 +1129,16 @@ export const ChatProvider = ({ children }) => {
       playSendCue();
       bumpConversationPreview(conversationId, optimisticMessage);
       void performSend(clientId, conversationId, peerId, payload);
+      return true;
     },
-    [authUser?._id, bumpConversationPreview, performSend, playSendCue]
+    [
+      authUser?._id,
+      blockedUserIdSet,
+      bumpConversationPreview,
+      performSend,
+      playSendCue,
+      t,
+    ]
   );
 
   const retryMessage = useCallback(
@@ -902,7 +1177,7 @@ export const ChatProvider = ({ children }) => {
           text,
         });
         if (!data.success) {
-          toast.error(data.message);
+          toast.error(data.message || t("common.errorGeneric"));
           return false;
         }
 
@@ -913,11 +1188,11 @@ export const ChatProvider = ({ children }) => {
         );
         return true;
       } catch (error) {
-        toast.error(getErrorMessage(error));
+        toast.error(getLocalizedError(error));
         return false;
       }
     },
-    [axios]
+    [axios, getLocalizedError, t]
   );
 
   const deleteMessage = useCallback(
@@ -925,7 +1200,7 @@ export const ChatProvider = ({ children }) => {
       try {
         const { data } = await axios.delete(`/api/messages/${messageId}`);
         if (!data.success) {
-          toast.error(data.message);
+          toast.error(data.message || t("common.errorGeneric"));
           return false;
         }
 
@@ -936,11 +1211,11 @@ export const ChatProvider = ({ children }) => {
         );
         return true;
       } catch (error) {
-        toast.error(getErrorMessage(error));
+        toast.error(getLocalizedError(error));
         return false;
       }
     },
-    [axios]
+    [axios, getLocalizedError, t]
   );
 
   const reactToMessage = useCallback(
@@ -950,7 +1225,7 @@ export const ChatProvider = ({ children }) => {
           emoji,
         });
         if (!data.success) {
-          toast.error(data.message);
+          toast.error(data.message || t("common.errorGeneric"));
           return false;
         }
 
@@ -964,11 +1239,349 @@ export const ChatProvider = ({ children }) => {
         );
         return true;
       } catch (error) {
-        toast.error(getErrorMessage(error));
+        toast.error(getLocalizedError(error));
         return false;
       }
     },
-    [axios]
+    [axios, getLocalizedError, t]
+  );
+
+  const updateConversationPreferences = useCallback(
+    async (conversationId, patch = {}) => {
+      const normalizedConversationId = toNormalizedId(conversationId);
+      if (!normalizedConversationId || !patch || typeof patch !== "object") return null;
+
+      const requestBody = {};
+      if (hasOwn(patch, "isPinned")) {
+        requestBody.isPinned = Boolean(patch.isPinned);
+      }
+      if (hasOwn(patch, "isArchived")) {
+        requestBody.isArchived = Boolean(patch.isArchived);
+      }
+      if (hasOwn(patch, "mutedUntil")) {
+        requestBody.mutedUntil = patch.mutedUntil || null;
+      }
+
+      if (!Object.keys(requestBody).length) {
+        return null;
+      }
+
+      try {
+        const { data } = await axios.patch(
+          `/api/conversations/${normalizedConversationId}/preferences`,
+          requestBody
+        );
+        if (!data.success || !data.conversation) {
+          toast.error(data.message || t("chat.updateConversationPreferencesFailed"));
+          return null;
+        }
+
+        const normalizedConversation = normalizeConversation(data.conversation);
+        if (normalizedConversation) {
+          upsertConversation(normalizedConversation);
+        }
+        return normalizedConversation;
+      } catch (error) {
+        toast.error(getLocalizedError(error, "chat.updateConversationPreferencesFailed"));
+        return null;
+      }
+    },
+    [axios, getLocalizedError, normalizeConversation, t, upsertConversation]
+  );
+
+  const patchDirectConversationBlockState = useCallback((peerUserId, patch = {}) => {
+    const normalizedPeerUserId = toNormalizedId(peerUserId);
+    if (!normalizedPeerUserId) return;
+
+    const patchConversationBlockState = (conversation) => {
+      if (!conversation || !isDirectConversation(conversation)) return conversation;
+      const conversationPeerId = getConversationPeerId(conversation);
+      if (conversationPeerId !== normalizedPeerUserId) return conversation;
+
+      const nextBlockedByMe = hasOwn(patch, "blockedByMe")
+        ? Boolean(patch.blockedByMe)
+        : Boolean(conversation.blockedByMe);
+      const nextBlockedByOther = hasOwn(patch, "blockedByOther")
+        ? Boolean(patch.blockedByOther)
+        : Boolean(conversation.blockedByOther);
+      const nextIsBlocked = hasOwn(patch, "isBlocked")
+        ? Boolean(patch.isBlocked)
+        : Boolean(nextBlockedByMe || nextBlockedByOther);
+
+      if (
+        nextBlockedByMe === Boolean(conversation.blockedByMe) &&
+        nextBlockedByOther === Boolean(conversation.blockedByOther) &&
+        nextIsBlocked === Boolean(conversation.isBlocked)
+      ) {
+        return conversation;
+      }
+
+      return {
+        ...conversation,
+        blockedByMe: nextBlockedByMe,
+        blockedByOther: nextBlockedByOther,
+        isBlocked: nextIsBlocked,
+      };
+    };
+
+    const patchUserLike = (entry) => {
+      if (!entry || toNormalizedId(entry._id) !== normalizedPeerUserId) return entry;
+      const nextBlockedByMe = hasOwn(patch, "blockedByMe")
+        ? Boolean(patch.blockedByMe)
+        : Boolean(entry.blockedByMe);
+      const nextBlockedByOther = hasOwn(patch, "blockedByOther")
+        ? Boolean(patch.blockedByOther)
+        : Boolean(entry.blockedByOther);
+      const nextIsBlocked = hasOwn(patch, "isBlocked")
+        ? Boolean(patch.isBlocked)
+        : Boolean(nextBlockedByMe || nextBlockedByOther);
+      return {
+        ...entry,
+        blockedByMe: nextBlockedByMe,
+        blockedByOther: nextBlockedByOther,
+        isBlocked: nextIsBlocked,
+      };
+    };
+
+    setConversations((previousConversations) =>
+      previousConversations.map((conversation) => patchConversationBlockState(conversation))
+    );
+    setSelectedConversation((previousConversation) =>
+      patchConversationBlockState(previousConversation)
+    );
+    setContacts((previousContacts) => previousContacts.map((contact) => patchUserLike(contact)));
+  }, []);
+
+  const blockUser = useCallback(
+    async (targetUserId) => {
+      const normalizedTargetUserId = toNormalizedId(targetUserId);
+      if (!normalizedTargetUserId) return false;
+
+      const didBlockUser = await authBlockUser(normalizedTargetUserId);
+      if (!didBlockUser) return false;
+
+      patchDirectConversationBlockState(normalizedTargetUserId, {
+        blockedByMe: true,
+      });
+      void getConversations();
+      return true;
+    },
+    [authBlockUser, getConversations, patchDirectConversationBlockState]
+  );
+
+  const unblockUser = useCallback(
+    async (targetUserId) => {
+      const normalizedTargetUserId = toNormalizedId(targetUserId);
+      if (!normalizedTargetUserId) return false;
+
+      const didUnblockUser = await authUnblockUser(normalizedTargetUserId);
+      if (!didUnblockUser) return false;
+
+      patchDirectConversationBlockState(normalizedTargetUserId, {
+        blockedByMe: false,
+      });
+      void getConversations();
+      return true;
+    },
+    [authUnblockUser, getConversations, patchDirectConversationBlockState]
+  );
+
+  const reportUser = useCallback(
+    async (targetUserId, payload = {}) => {
+      const normalizedTargetUserId = toNormalizedId(targetUserId);
+      if (!normalizedTargetUserId) return false;
+
+      const reason = String(payload?.reason || "other").trim().toLowerCase() || "other";
+      const details = String(payload?.details || "").trim();
+
+      try {
+        const { data } = await axios.post("/api/reports", {
+          targetType: "user",
+          targetUserId: normalizedTargetUserId,
+          reason,
+          details,
+        });
+        if (!data.success) {
+          toast.error(data.message || t("chat.submitReportFailed"));
+          return false;
+        }
+        toast.success(data.message || t("chat.submitReportSuccess"));
+        return true;
+      } catch (error) {
+        toast.error(getLocalizedError(error, "chat.submitReportFailed"));
+        return false;
+      }
+    },
+    [axios, getLocalizedError, t]
+  );
+
+  const reportMessage = useCallback(
+    async (messageId, payload = {}) => {
+      const normalizedMessageId = toNormalizedId(messageId);
+      if (!normalizedMessageId) return false;
+
+      const reason = String(payload?.reason || "other").trim().toLowerCase() || "other";
+      const details = String(payload?.details || "").trim();
+
+      try {
+        const { data } = await axios.post("/api/reports", {
+          targetType: "message",
+          messageId: normalizedMessageId,
+          reason,
+          details,
+        });
+        if (!data.success) {
+          toast.error(data.message || t("chat.submitReportFailed"));
+          return false;
+        }
+        toast.success(data.message || t("chat.submitReportSuccess"));
+        return true;
+      } catch (error) {
+        toast.error(getLocalizedError(error, "chat.submitReportFailed"));
+        return false;
+      }
+    },
+    [axios, getLocalizedError, t]
+  );
+
+  const toggleStarMessage = useCallback(
+    async (messageId, options = {}) => {
+      const normalizedMessageId = toNormalizedId(messageId);
+      if (!normalizedMessageId) return { success: false, isStarred: false };
+
+      const requestBody = {};
+      if (hasOwn(options, "starred")) {
+        requestBody.starred = Boolean(options.starred);
+      }
+
+      try {
+        const { data } = await axios.post(
+          `/api/messages/star/${normalizedMessageId}`,
+          requestBody
+        );
+        if (!data.success) {
+          toast.error(data.message || t("chat.starToggleFailed"));
+          return { success: false, isStarred: false };
+        }
+
+        const starredBy = Array.isArray(data.starredBy)
+          ? data.starredBy.map((userId) => toNormalizedId(userId)).filter(Boolean)
+          : [];
+
+        setMessages((previousMessages) =>
+          previousMessages.map((message) =>
+            String(message._id) === normalizedMessageId
+              ? { ...message, starredBy }
+              : message
+          )
+        );
+
+        return { success: true, isStarred: Boolean(data.isStarred), starredBy };
+      } catch (error) {
+        toast.error(getLocalizedError(error, "chat.starToggleFailed"));
+        return { success: false, isStarred: false };
+      }
+    },
+    [axios, getLocalizedError, t]
+  );
+
+  const getStarredMessages = useCallback(
+    async (options = {}) => {
+      const requestedLimit = Number.parseInt(options.limit, 10);
+      const limit =
+        Number.isFinite(requestedLimit) && requestedLimit > 0
+          ? Math.min(requestedLimit, 120)
+          : 80;
+
+      try {
+        const { data } = await axios.get("/api/messages/starred", {
+          params: { limit },
+        });
+        if (!data.success) {
+          toast.error(data.message || t("chat.loadStarredFailed"));
+          return [];
+        }
+        return Array.isArray(data.conversations) ? data.conversations : [];
+      } catch (error) {
+        toast.error(getLocalizedError(error, "chat.loadStarredFailed"));
+        return [];
+      }
+    },
+    [axios, getLocalizedError, t]
+  );
+
+  const forwardMessage = useCallback(
+    async (messageId, targetIds = []) => {
+      const normalizedMessageId = toNormalizedId(messageId);
+      const normalizedTargetIds = Array.from(
+        new Set(
+          (Array.isArray(targetIds) ? targetIds : [])
+            .map((targetId) => toNormalizedId(targetId))
+            .filter(Boolean)
+        )
+      );
+      if (!normalizedMessageId || !normalizedTargetIds.length) {
+        return { success: false, forwarded: [], failed: [] };
+      }
+
+      try {
+        const { data } = await axios.post(`/api/messages/forward/${normalizedMessageId}`, {
+          targetIds: normalizedTargetIds,
+        });
+
+        if (!data.success) {
+          toast.error(data.message || t("chat.forwardFailed"));
+          return {
+            success: false,
+            forwarded: [],
+            failed: Array.isArray(data.failed) ? data.failed : [],
+          };
+        }
+
+        const forwarded = Array.isArray(data.forwarded) ? data.forwarded : [];
+        const failed = Array.isArray(data.failed) ? data.failed : [];
+        if (forwarded.length && !failed.length) {
+          toast.success(
+            t("chat.forwardSuccess", {
+              count: forwarded.length,
+              label: getConversationCountLabel(forwarded.length),
+            })
+          );
+        } else if (forwarded.length) {
+          toast.success(
+            t("chat.forwardPartialSuccess", {
+              count: forwarded.length,
+              label: getConversationCountLabel(forwarded.length),
+              failed: failed.length,
+            })
+          );
+        }
+
+        const shouldRefreshConversations = forwarded.some((entry) => {
+          const normalizedConversationId = toNormalizedId(entry?.conversationId || entry?.targetId);
+          return (
+            normalizedConversationId &&
+            !resolveConversationByTargetId(normalizedConversationId, conversationsRef.current)
+          );
+        });
+        if (shouldRefreshConversations) {
+          void getConversations();
+        }
+
+        return { success: true, forwarded, failed };
+      } catch (error) {
+        toast.error(getLocalizedError(error, "chat.forwardFailed"));
+        return { success: false, forwarded: [], failed: [] };
+      }
+    },
+    [
+      axios,
+      getConversationCountLabel,
+      getConversations,
+      getLocalizedError,
+      resolveConversationByTargetId,
+      t,
+    ]
   );
 
   const searchMessages = useCallback(
@@ -987,14 +1600,163 @@ export const ChatProvider = ({ children }) => {
         if (data.success) {
           return data.messages || [];
         }
-        toast.error(data.message);
+        toast.error(data.message || t("common.errorGeneric"));
         return [];
       } catch (error) {
-        toast.error(getErrorMessage(error));
+        toast.error(getLocalizedError(error));
         return [];
       }
     },
-    [axios]
+    [axios, getLocalizedError, t]
+  );
+
+  const getThreadMessages = useCallback(
+    async (threadMessageId) => {
+      const normalizedThreadMessageId = toNormalizedId(threadMessageId);
+      if (!normalizedThreadMessageId) {
+        return { success: false, messages: [], threadRootId: "" };
+      }
+
+      try {
+        const { data } = await axios.get(`/api/messages/thread/${normalizedThreadMessageId}`);
+        if (!data.success) {
+          toast.error(data.message || t("chat.loadThreadFailed"));
+          return { success: false, messages: [], threadRootId: "" };
+        }
+
+        const normalizedConversationId = toNormalizedId(data.conversationId);
+        const normalizedMessages = (Array.isArray(data.messages) ? data.messages : []).map(
+          (message) => ({
+            ...message,
+            conversationId: toNormalizedId(message.conversationId || normalizedConversationId),
+          })
+        );
+
+        return {
+          success: true,
+          messages: normalizedMessages,
+          threadRootId: toNormalizedId(data.threadRootId),
+          conversationId: normalizedConversationId,
+        };
+      } catch (error) {
+        toast.error(getLocalizedError(error, "chat.loadThreadFailed"));
+        return { success: false, messages: [], threadRootId: "" };
+      }
+    },
+    [axios, getLocalizedError, t]
+  );
+
+  const globalSearch = useCallback(
+    async (query, options = {}) => {
+      const cleanedQuery = String(query || "").trim();
+      if (!cleanedQuery) return [];
+
+      const requestedLimit = Number.parseInt(options.limit, 10);
+      const searchLimit = Number.isFinite(requestedLimit) && requestedLimit > 0
+        ? Math.min(requestedLimit, 120)
+        : DEFAULT_GLOBAL_SEARCH_LIMIT;
+
+      try {
+        const { data } = await axios.get("/api/messages/search", {
+          params: { q: cleanedQuery, limit: searchLimit },
+        });
+        if (data.success) {
+          return Array.isArray(data.conversations) ? data.conversations : [];
+        }
+        toast.error(data.message || t("chat.runGlobalSearchFailed"));
+        return [];
+      } catch (error) {
+        toast.error(getLocalizedError(error, "chat.runGlobalSearchFailed"));
+        return [];
+      }
+    },
+    [axios, getLocalizedError, t]
+  );
+
+  const clearPendingConversationJumpTarget = useCallback(
+    (expectedConversationId = "", expectedMessageId = "") => {
+      const normalizedExpectedConversationId = toNormalizedId(expectedConversationId);
+      const normalizedExpectedMessageId = toNormalizedId(expectedMessageId);
+
+      setPendingConversationJumpTarget((previousTarget) => {
+        if (!previousTarget) return null;
+        if (
+          normalizedExpectedConversationId &&
+          toNormalizedId(previousTarget.conversationId) !== normalizedExpectedConversationId
+        ) {
+          return previousTarget;
+        }
+        if (
+          normalizedExpectedMessageId &&
+          toNormalizedId(previousTarget.messageId) !== normalizedExpectedMessageId
+        ) {
+          return previousTarget;
+        }
+        return null;
+      });
+    },
+    []
+  );
+
+  const openConversationAtMessage = useCallback(
+    async ({ conversationId, messageId }) => {
+      const normalizedConversationId = toNormalizedId(conversationId);
+      const normalizedMessageId = toNormalizedId(messageId);
+      if (!normalizedConversationId || !normalizedMessageId) return false;
+
+      setPendingConversationJumpTarget({
+        conversationId: normalizedConversationId,
+        messageId: normalizedMessageId,
+      });
+
+      let nextConversation =
+        resolveConversationByTargetId(normalizedConversationId, conversationsRef.current) ||
+        null;
+
+      if (!nextConversation) {
+        try {
+          const { data } = await axios.get(`/api/conversations/${normalizedConversationId}`);
+          if (data?.success && data?.conversation) {
+            const normalizedConversation = normalizeConversation(data.conversation);
+            if (normalizedConversation) {
+              upsertConversation(normalizedConversation);
+              nextConversation = normalizedConversation;
+            }
+          }
+        } catch {
+          nextConversation = null;
+        }
+      }
+
+      if (!nextConversation) {
+        nextConversation =
+          normalizeConversation({
+            _id: normalizedConversationId,
+            type: "direct",
+            title: translate("conversations.conversation"),
+            participants: [],
+            peer: null,
+            peerId: "",
+            lastMessagePreview: "",
+            lastMessageAt: null,
+          }) || {
+            _id: normalizedConversationId,
+            type: "direct",
+            title: translate("conversations.conversation"),
+            participants: [],
+            peer: null,
+            peerId: "",
+            avatar: "",
+            name: "",
+            unseenCount: 0,
+            isAdmin: false,
+          };
+      }
+
+      setSelectedConversation(nextConversation);
+      return true;
+    },
+    [axios, normalizeConversation, resolveConversationByTargetId, upsertConversation]
   );
 
   const emitTyping = useCallback(
@@ -1048,7 +1810,7 @@ export const ChatProvider = ({ children }) => {
           avatar,
         });
         if (!data.success || !data.conversation) {
-          toast.error(data.message || "Could not create group");
+          toast.error(data.message || t("chat.createGroupFailed"));
           return null;
         }
 
@@ -1063,11 +1825,11 @@ export const ChatProvider = ({ children }) => {
         }));
         return normalizedConversation;
       } catch (error) {
-        toast.error(getErrorMessage(error));
+        toast.error(getLocalizedError(error, "chat.createGroupFailed"));
         return null;
       }
     },
-    [axios, normalizeConversation, upsertConversation]
+    [axios, getLocalizedError, normalizeConversation, t, upsertConversation]
   );
 
   const addGroupMembers = useCallback(
@@ -1081,17 +1843,17 @@ export const ChatProvider = ({ children }) => {
           { participantIds }
         );
         if (!data.success) {
-          toast.error(data.message || "Could not add members");
+          toast.error(data.message || t("chat.addMembersFailed"));
           return false;
         }
         await getConversations();
         return true;
       } catch (error) {
-        toast.error(getErrorMessage(error));
+        toast.error(getLocalizedError(error, "chat.addMembersFailed"));
         return false;
       }
     },
-    [axios, getConversations]
+    [axios, getConversations, getLocalizedError, t]
   );
 
   const removeGroupMember = useCallback(
@@ -1105,17 +1867,17 @@ export const ChatProvider = ({ children }) => {
           `/api/conversations/${normalizedConversationId}/members/${normalizedUserId}`
         );
         if (!data.success) {
-          toast.error(data.message || "Could not remove member");
+          toast.error(data.message || t("chat.removeMemberFailed"));
           return false;
         }
         await getConversations();
         return true;
       } catch (error) {
-        toast.error(getErrorMessage(error));
+        toast.error(getLocalizedError(error, "chat.removeMemberFailed"));
         return false;
       }
     },
-    [axios, getConversations]
+    [axios, getConversations, getLocalizedError, t]
   );
 
   const leaveConversation = useCallback(
@@ -1128,7 +1890,7 @@ export const ChatProvider = ({ children }) => {
           `/api/conversations/${normalizedConversationId}/leave`
         );
         if (!data.success) {
-          toast.error(data.message || "Could not leave conversation");
+          toast.error(data.message || t("chat.leaveConversationFailed"));
           return false;
         }
         setSelectedConversation((previousConversation) =>
@@ -1139,11 +1901,11 @@ export const ChatProvider = ({ children }) => {
         await getConversations();
         return true;
       } catch (error) {
-        toast.error(getErrorMessage(error));
+        toast.error(getLocalizedError(error, "chat.leaveConversationFailed"));
         return false;
       }
     },
-    [axios, getConversations]
+    [axios, getConversations, getLocalizedError, t]
   );
 
   const patchUserPresence = useCallback((userId, presencePatch = {}) => {
@@ -1215,6 +1977,25 @@ export const ChatProvider = ({ children }) => {
       const normalizedConversationId = toNormalizedId(incomingMessage.conversationId);
       const normalizedSenderId = toNormalizedId(incomingMessage.senderId);
       const normalizedAuthUserId = toNormalizedId(authUser?._id);
+      const incomingMessageId = String(incomingMessage?._id || "");
+      const incomingClientId = String(incomingMessage?.clientId || "");
+      const upsertIncomingMessage = (previousMessages, nextMessage) => {
+        const existingIndex = previousMessages.findIndex(
+          (message) =>
+            String(message?._id || "") === incomingMessageId ||
+            (incomingClientId &&
+              String(message?.clientId || "") === incomingClientId)
+        );
+        if (existingIndex < 0) {
+          return [...previousMessages, nextMessage];
+        }
+        const updatedMessages = [...previousMessages];
+        updatedMessages[existingIndex] = {
+          ...updatedMessages[existingIndex],
+          ...nextMessage,
+        };
+        return updatedMessages;
+      };
 
       if (normalizedConversationId && normalizedSenderId) {
         setTypingUsers((previousTypingUsers) => {
@@ -1238,12 +2019,24 @@ export const ChatProvider = ({ children }) => {
 
       const isOwnIncomingMessage =
         normalizedSenderId && normalizedSenderId === normalizedAuthUserId;
+      const matchingConversation =
+        conversationsRef.current.find(
+          (conversation) =>
+            toNormalizedId(conversation._id) ===
+            toNormalizedId(normalizedConversationId || incomingMessage.conversationId)
+        ) ||
+        resolveConversationByTargetId(normalizedSenderId, conversationsRef.current);
+      const isMutedConversation = isConversationMuted(matchingConversation);
 
       const hydratedIncomingMessage = {
         ...incomingMessage,
         conversationId:
           normalizedConversationId || activeConversationId || normalizedSenderId,
       };
+      const isMentionedIncomingMessage = isUserMentionedInMessage(
+        hydratedIncomingMessage,
+        normalizedAuthUserId
+      );
 
       if (isActiveConversation) {
         if (!isOwnIncomingMessage) {
@@ -1251,7 +2044,9 @@ export const ChatProvider = ({ children }) => {
           hydratedIncomingMessage.status = "read";
         }
 
-        setMessages((previousMessages) => [...previousMessages, hydratedIncomingMessage]);
+        setMessages((previousMessages) =>
+          upsertIncomingMessage(previousMessages, hydratedIncomingMessage)
+        );
         setUnseenMessages((previousUnseenMessages) => ({
           ...previousUnseenMessages,
           [hydratedIncomingMessage.conversationId]: 0,
@@ -1259,7 +2054,9 @@ export const ChatProvider = ({ children }) => {
         bumpConversationPreview(hydratedIncomingMessage.conversationId, hydratedIncomingMessage);
 
         if (!isOwnIncomingMessage) {
-          playReceiveCue();
+          if (!isMutedConversation) {
+            playReceiveCue();
+          }
           try {
             await axios.put(`/api/messages/mark/${hydratedIncomingMessage._id}`);
 
@@ -1273,39 +2070,39 @@ export const ChatProvider = ({ children }) => {
             }
             socket.emit("messagesSeen", messagesSeenPayload);
           } catch (error) {
-            toast.error(getErrorMessage(error));
+            toast.error(getLocalizedError(error));
           }
         }
       } else {
         if (!isOwnIncomingMessage) {
           const unseenKey = hydratedIncomingMessage.conversationId || normalizedSenderId;
           if (unseenKey) {
+            const unseenIncrement = isMentionedIncomingMessage ? 2 : 1;
             setUnseenMessages((previousUnseenMessages) => ({
               ...previousUnseenMessages,
-              [unseenKey]: Number(previousUnseenMessages[unseenKey] || 0) + 1,
+              [unseenKey]:
+                Number(previousUnseenMessages[unseenKey] || 0) + unseenIncrement,
             }));
           }
 
-          playReceiveCue();
-          const sender =
-            usersRef.current.find((user) => toNormalizedId(user._id) === normalizedSenderId) ||
-            contactsRef.current.find(
-              (contact) => toNormalizedId(contact._id) === normalizedSenderId
-            );
-          const matchingConversation = conversationsRef.current.find(
-            (conversation) =>
-              toNormalizedId(conversation._id) === hydratedIncomingMessage.conversationId
-          );
+          if (!isMentionedIncomingMessage && !isMutedConversation) {
+            playReceiveCue();
+            const sender =
+              usersRef.current.find((user) => toNormalizedId(user._id) === normalizedSenderId) ||
+              contactsRef.current.find(
+                (contact) => toNormalizedId(contact._id) === normalizedSenderId
+              );
 
-          const senderName = sender?.fullName || "New message";
-          const notificationTitle =
-            matchingConversation && isGroupConversation(matchingConversation)
-              ? `${getConversationTitle(matchingConversation)} · ${senderName}`
-              : senderName;
-          showNotification(notificationTitle, {
-            body: getNotificationBody(hydratedIncomingMessage),
-            icon: sender?.profilePic || undefined,
-          });
+            const senderName = sender?.fullName || t("chat.newMessageFallback");
+            const notificationTitle =
+              matchingConversation && isGroupConversation(matchingConversation)
+                ? `${getConversationTitle(matchingConversation)} · ${senderName}`
+                : senderName;
+            showNotification(notificationTitle, {
+              body: getNotificationBody(hydratedIncomingMessage),
+              icon: sender?.profilePic || undefined,
+            });
+          }
         }
 
         bumpConversationPreview(hydratedIncomingMessage.conversationId, hydratedIncomingMessage);
@@ -1406,14 +2203,16 @@ export const ChatProvider = ({ children }) => {
     socket.on("messageUpdated", ({ message, conversationId }) => {
       if (!message?._id) return;
       const normalizedConversationId = toNormalizedId(conversationId || message.conversationId);
-      const activeConversationId = toNormalizedId(selectedConversationRef.current?._id);
-      if (normalizedConversationId && activeConversationId !== normalizedConversationId) return;
 
       setMessages((previousMessages) =>
         previousMessages.map((previousMessage) =>
           previousMessage._id === message._id ? message : previousMessage
         )
       );
+
+      if (normalizedConversationId) {
+        bumpConversationPreview(normalizedConversationId, message);
+      }
     });
 
     socket.on("messageDeleted", ({ messageId, message, conversationId }) => {
@@ -1421,8 +2220,6 @@ export const ChatProvider = ({ children }) => {
       const normalizedConversationId = toNormalizedId(
         conversationId || message?.conversationId
       );
-      const activeConversationId = toNormalizedId(selectedConversationRef.current?._id);
-      if (normalizedConversationId && activeConversationId !== normalizedConversationId) return;
 
       setMessages((previousMessages) =>
         previousMessages.map((previousMessage) =>
@@ -1431,6 +2228,13 @@ export const ChatProvider = ({ children }) => {
             : previousMessage
         )
       );
+
+      if (normalizedConversationId) {
+        bumpConversationPreview(
+          normalizedConversationId,
+          message || { _id: messageId, isDeleted: true, text: "" }
+        );
+      }
     });
 
     socket.on("messageReaction", ({ messageId, reactions = [], conversationId }) => {
@@ -1447,6 +2251,74 @@ export const ChatProvider = ({ children }) => {
             : previousMessage
         )
       );
+    });
+
+    socket.on("messageStarred", ({ messageId, starredBy = [], conversationId }) => {
+      if (!messageId) return;
+      const normalizedConversationId = toNormalizedId(conversationId);
+      const activeConversationId = toNormalizedId(selectedConversationRef.current?._id);
+      if (
+        normalizedConversationId &&
+        activeConversationId &&
+        activeConversationId !== normalizedConversationId
+      ) {
+        return;
+      }
+
+      const normalizedMessageId = String(messageId);
+      const normalizedStarredBy = Array.isArray(starredBy)
+        ? starredBy.map((userId) => toNormalizedId(userId)).filter(Boolean)
+        : [];
+
+      setMessages((previousMessages) =>
+        previousMessages.map((previousMessage) =>
+          String(previousMessage._id) === normalizedMessageId
+            ? { ...previousMessage, starredBy: normalizedStarredBy }
+            : previousMessage
+        )
+      );
+    });
+
+    socket.on("mentionedInMessage", ({ message, conversationId, senderId }) => {
+      const normalizedConversationId = toNormalizedId(conversationId || message?.conversationId);
+      const activeConversationId = toNormalizedId(selectedConversationRef.current?._id);
+      if (
+        normalizedConversationId &&
+        activeConversationId &&
+        normalizedConversationId === activeConversationId
+      ) {
+        return;
+      }
+
+      const normalizedSenderId = toNormalizedId(senderId || message?.senderId);
+      if (!normalizedSenderId) return;
+
+      const sender =
+        usersRef.current.find((user) => toNormalizedId(user._id) === normalizedSenderId) ||
+        contactsRef.current.find(
+          (contact) => toNormalizedId(contact._id) === normalizedSenderId
+        );
+      const matchingConversation = conversationsRef.current.find(
+        (conversation) =>
+          toNormalizedId(conversation._id) ===
+          toNormalizedId(normalizedConversationId || message?.conversationId)
+      );
+      if (isConversationMuted(matchingConversation)) {
+        return;
+      }
+
+      playReceiveCue();
+      const senderName = sender?.fullName || t("chat.someoneFallback");
+      const notificationTitle =
+        matchingConversation && isGroupConversation(matchingConversation)
+          ? `${getConversationTitle(matchingConversation)} · ${t("chat.mentionLabel")}`
+          : t("chat.mentionedYouTitle", { name: senderName });
+      showNotification(notificationTitle, {
+        body: t("chat.mentionedYouBody", {
+          body: getNotificationBody(message || {}),
+        }),
+        icon: sender?.profilePic || undefined,
+      });
     });
 
     socket.on("conversationCreated", ({ conversation }) => {
@@ -1470,11 +2342,13 @@ export const ChatProvider = ({ children }) => {
     axios,
     bumpConversationPreview,
     getConversations,
+    getLocalizedError,
     patchUserPresence,
     playReceiveCue,
     resolveConversationByTargetId,
     showNotification,
     socket,
+    t,
     upsertConversation,
   ]);
 
@@ -1488,6 +2362,8 @@ export const ChatProvider = ({ children }) => {
     socket.off("messageUpdated");
     socket.off("messageDeleted");
     socket.off("messageReaction");
+    socket.off("messageStarred");
+    socket.off("mentionedInMessage");
     socket.off("conversationCreated");
     socket.off("conversationUpdated");
     socket.off("userPresenceUpdated");
@@ -1515,6 +2391,7 @@ export const ChatProvider = ({ children }) => {
     users,
     contacts,
     selectedConversation,
+    selectedConversationBlockState,
     selectedUser,
     getConversations,
     getUsers,
@@ -1527,7 +2404,15 @@ export const ChatProvider = ({ children }) => {
     editMessage,
     deleteMessage,
     reactToMessage,
+    toggleStarMessage,
+    forwardMessage,
     searchMessages,
+    getStarredMessages,
+    getThreadMessages,
+    globalSearch,
+    openConversationAtMessage,
+    pendingConversationJumpTarget,
+    clearPendingConversationJumpTarget,
     setSelectedConversation,
     setSelectedUser,
     createOrOpenDirectConversation,
@@ -1535,6 +2420,11 @@ export const ChatProvider = ({ children }) => {
     addGroupMembers,
     removeGroupMember,
     leaveConversation,
+    updateConversationPreferences,
+    blockUser,
+    unblockUser,
+    reportUser,
+    reportMessage,
     unseenMessages,
     setUnseenMessages,
     usersLoading,

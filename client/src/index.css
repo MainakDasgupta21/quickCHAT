@@ -41,6 +41,85 @@
   --animate-pulse-ring: pulse-ring 1.6s ease-out infinite;
 }
 
+:root {
+  color-scheme: dark;
+  --theme-text: #eceaff;
+  --theme-selection-bg: rgba(157, 125, 255, 0.34);
+  --theme-selection-text: #faf9ff;
+  --theme-scrollbar-thumb-start: rgba(166, 150, 255, 0.68);
+  --theme-scrollbar-thumb-end: rgba(91, 69, 211, 0.72);
+  --theme-scrollbar-thumb-hover-start: rgba(191, 181, 255, 0.8);
+  --theme-scrollbar-thumb-hover-end: rgba(108, 83, 236, 0.82);
+  --glass-panel-bg: linear-gradient(170deg, rgba(30, 25, 50, 0.78), rgba(19, 16, 33, 0.7));
+  --glass-subtle-bg: linear-gradient(170deg, rgba(37, 31, 60, 0.56), rgba(22, 18, 37, 0.55));
+  --glass-subtle-border: rgba(207, 212, 255, 0.16);
+  --icon-btn-border: rgba(207, 212, 255, 0.15);
+  --icon-btn-bg: rgba(255, 255, 255, 0.07);
+  --icon-btn-text: rgba(248, 246, 255, 0.88);
+  --icon-btn-hover-border: rgba(207, 212, 255, 0.28);
+  --icon-btn-hover-bg: rgba(255, 255, 255, 0.12);
+  --menu-surface-border: rgba(207, 212, 255, 0.16);
+  --menu-surface-bg: linear-gradient(170deg, rgba(39, 33, 64, 0.92), rgba(20, 17, 36, 0.9));
+  --field-shell-border: rgba(207, 212, 255, 0.15);
+  --field-shell-bg: linear-gradient(170deg, rgba(34, 28, 56, 0.62), rgba(21, 18, 36, 0.6));
+  --field-shell-focus-border: rgba(168, 157, 255, 0.55);
+  --field-shell-focus-ring: rgba(154, 125, 255, 0.15);
+  --field-input-color: #f5f3ff;
+  --field-input-placeholder: rgba(236, 233, 255, 0.55);
+  --app-ambient-bg:
+    radial-gradient(circle at 12% 8%, rgba(138, 101, 255, 0.34), transparent 30%),
+    radial-gradient(circle at 84% 14%, rgba(86, 146, 250, 0.24), transparent 30%),
+    radial-gradient(circle at 54% 92%, rgba(126, 76, 244, 0.22), transparent 35%);
+  --app-texture-opacity: 0.2;
+  --app-texture-filter: none;
+}
+
+:root[data-theme="light"] {
+  color-scheme: light;
+  --color-surface-900: #eef2ff;
+  --color-surface-800: #e4e9fb;
+  --color-surface-700: #dbe2f9;
+  --color-surface-600: #ced8f4;
+  --color-glass: rgba(106, 120, 182, 0.14);
+  --color-glass-strong: rgba(106, 120, 182, 0.2);
+  --color-border-soft: rgba(102, 119, 184, 0.25);
+  --color-border-strong: rgba(102, 119, 184, 0.34);
+  --gradient-bg:
+    radial-gradient(circle at 16% 10%, rgba(149, 129, 255, 0.24), transparent 38%),
+    radial-gradient(circle at 84% 16%, rgba(102, 164, 255, 0.2), transparent 35%),
+    radial-gradient(circle at 52% 92%, rgba(136, 118, 248, 0.2), transparent 40%),
+    #f4f7ff;
+  --theme-text: #1c2444;
+  --theme-selection-bg: rgba(116, 102, 228, 0.24);
+  --theme-selection-text: #161c36;
+  --theme-scrollbar-thumb-start: rgba(138, 125, 220, 0.66);
+  --theme-scrollbar-thumb-end: rgba(108, 118, 208, 0.72);
+  --theme-scrollbar-thumb-hover-start: rgba(125, 111, 214, 0.84);
+  --theme-scrollbar-thumb-hover-end: rgba(96, 106, 196, 0.84);
+  --glass-panel-bg: linear-gradient(170deg, rgba(255, 255, 255, 0.9), rgba(242, 246, 255, 0.9));
+  --glass-subtle-bg: linear-gradient(170deg, rgba(255, 255, 255, 0.76), rgba(243, 247, 255, 0.76));
+  --glass-subtle-border: rgba(101, 116, 178, 0.24);
+  --icon-btn-border: rgba(98, 113, 177, 0.24);
+  --icon-btn-bg: rgba(96, 112, 179, 0.12);
+  --icon-btn-text: rgba(28, 36, 68, 0.9);
+  --icon-btn-hover-border: rgba(96, 112, 176, 0.34);
+  --icon-btn-hover-bg: rgba(95, 109, 174, 0.18);
+  --menu-surface-border: rgba(95, 112, 176, 0.24);
+  --menu-surface-bg: linear-gradient(170deg, rgba(255, 255, 255, 0.95), rgba(243, 247, 255, 0.95));
+  --field-shell-border: rgba(97, 114, 180, 0.24);
+  --field-shell-bg: linear-gradient(170deg, rgba(255, 255, 255, 0.92), rgba(244, 248, 255, 0.92));
+  --field-shell-focus-border: rgba(108, 96, 214, 0.56);
+  --field-shell-focus-ring: rgba(107, 94, 213, 0.21);
+  --field-input-color: #1e274a;
+  --field-input-placeholder: rgba(30, 39, 74, 0.5);
+  --app-ambient-bg:
+    radial-gradient(circle at 12% 8%, rgba(145, 117, 255, 0.24), transparent 34%),
+    radial-gradient(circle at 84% 14%, rgba(109, 170, 255, 0.2), transparent 34%),
+    radial-gradient(circle at 54% 92%, rgba(139, 118, 248, 0.16), transparent 38%);
+  --app-texture-opacity: 0.1;
+  --app-texture-filter: brightness(1.2) saturate(0.75);
+}
+
 @keyframes fade-in {
   from {
     opacity: 0;
@@ -137,14 +216,14 @@ html {
 body {
   margin: 0;
   background: var(--gradient-bg);
-  color: #eceaff;
+  color: var(--theme-text);
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
 }
 
 ::selection {
-  background-color: rgba(157, 125, 255, 0.34);
-  color: #faf9ff;
+  background-color: var(--theme-selection-bg);
+  color: var(--theme-selection-text);
 }
 
 * {
@@ -164,12 +243,20 @@ body {
 *::-webkit-scrollbar-thumb {
   border-radius: 9999px;
   border: 2px solid transparent;
-  background: linear-gradient(180deg, rgba(166, 150, 255, 0.68), rgba(91, 69, 211, 0.72));
+  background: linear-gradient(
+    180deg,
+    var(--theme-scrollbar-thumb-start),
+    var(--theme-scrollbar-thumb-end)
+  );
   background-clip: padding-box;
 }
 
 *::-webkit-scrollbar-thumb:hover {
-  background: linear-gradient(180deg, rgba(191, 181, 255, 0.8), rgba(108, 83, 236, 0.82));
+  background: linear-gradient(
+    180deg,
+    var(--theme-scrollbar-thumb-hover-start),
+    var(--theme-scrollbar-thumb-hover-end)
+  );
   background-clip: padding-box;
 }
 
@@ -196,16 +283,29 @@ body {
 }
 
 @layer components {
+  .app-shell {
+    color: var(--theme-text);
+  }
+
+  .app-ambient {
+    background: var(--app-ambient-bg);
+  }
+
+  .app-texture {
+    opacity: var(--app-texture-opacity);
+    filter: var(--app-texture-filter);
+  }
+
   .glass-panel {
-    background: linear-gradient(170deg, rgba(30, 25, 50, 0.78), rgba(19, 16, 33, 0.7));
+    background: var(--glass-panel-bg);
     border: 1px solid var(--color-border-soft);
     box-shadow: var(--shadow-elevated);
     backdrop-filter: blur(18px);
   }
 
   .glass-subtle {
-    background: linear-gradient(170deg, rgba(37, 31, 60, 0.56), rgba(22, 18, 37, 0.55));
-    border: 1px solid rgba(207, 212, 255, 0.16);
+    background: var(--glass-subtle-bg);
+    border: 1px solid var(--glass-subtle-border);
     backdrop-filter: blur(12px);
   }
 
@@ -232,33 +332,33 @@ body {
     height: 2.5rem;
     width: 2.5rem;
     border-radius: 0.75rem;
-    border: 1px solid rgba(207, 212, 255, 0.15);
-    background: rgba(255, 255, 255, 0.07);
-    color: rgba(248, 246, 255, 0.88);
+    border: 1px solid var(--icon-btn-border);
+    background: var(--icon-btn-bg);
+    color: var(--icon-btn-text);
   }
 
   .icon-btn:hover {
-    border-color: rgba(207, 212, 255, 0.28);
-    background: rgba(255, 255, 255, 0.12);
+    border-color: var(--icon-btn-hover-border);
+    background: var(--icon-btn-hover-bg);
   }
 
   .menu-surface {
     border-radius: 0.85rem;
-    border: 1px solid rgba(207, 212, 255, 0.16);
-    background: linear-gradient(170deg, rgba(39, 33, 64, 0.92), rgba(20, 17, 36, 0.9));
+    border: 1px solid var(--menu-surface-border);
+    background: var(--menu-surface-bg);
     box-shadow: var(--shadow-soft);
     backdrop-filter: blur(12px);
   }
 
   .field-shell {
     border-radius: 1rem;
-    border: 1px solid rgba(207, 212, 255, 0.15);
-    background: linear-gradient(170deg, rgba(34, 28, 56, 0.62), rgba(21, 18, 36, 0.6));
+    border: 1px solid var(--field-shell-border);
+    background: var(--field-shell-bg);
   }
 
   .field-shell:focus-within {
-    border-color: rgba(168, 157, 255, 0.55);
-    box-shadow: 0 0 0 3px rgba(154, 125, 255, 0.15);
+    border-color: var(--field-shell-focus-border);
+    box-shadow: 0 0 0 3px var(--field-shell-focus-ring);
   }
 
   .field-input {
@@ -266,11 +366,98 @@ body {
     border: none;
     outline: none;
     background: transparent;
-    color: #f5f3ff;
+    color: var(--field-input-color);
   }
 
   .field-input::placeholder {
-    color: rgba(236, 233, 255, 0.55);
+    color: var(--field-input-placeholder);
+  }
+
+  .message-md {
+    color: inherit;
+    display: flex;
+    flex-direction: column;
+    gap: 0.4rem;
+  }
+
+  .message-md > * {
+    margin: 0;
+  }
+
+  .message-md ul,
+  .message-md ol {
+    margin: 0.15rem 0;
+    padding-left: 1.1rem;
+  }
+
+  [dir="rtl"] .message-md ul,
+  [dir="rtl"] .message-md ol {
+    padding-left: 0;
+    padding-right: 1.1rem;
+  }
+
+  .message-md li {
+    margin: 0.08rem 0;
+  }
+
+  .message-md-pre {
+    margin: 0.2rem 0;
+    padding: 0.65rem 0.7rem;
+    border: 1px solid rgba(207, 212, 255, 0.2);
+    border-radius: 0.7rem;
+    background: rgba(8, 8, 16, 0.36);
+    overflow-x: auto;
+  }
+
+  .message-md-code-block {
+    font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono",
+      "Courier New", monospace;
+    font-size: 0.78rem;
+    line-height: 1.45;
+    white-space: pre;
+  }
+
+  .message-md-code-inline {
+    font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono",
+      "Courier New", monospace;
+    font-size: 0.78rem;
+    border-radius: 0.35rem;
+    border: 1px solid rgba(207, 212, 255, 0.24);
+    background: rgba(8, 8, 16, 0.3);
+    padding: 0.1rem 0.28rem;
+  }
+
+  .message-md-blockquote {
+    margin: 0.1rem 0;
+    padding-left: 0.62rem;
+    border-left: 2px solid rgba(195, 190, 253, 0.45);
+    color: rgba(245, 243, 255, 0.86);
+  }
+
+  [dir="rtl"] .message-md-blockquote {
+    padding-left: 0;
+    padding-right: 0.62rem;
+    border-left: none;
+    border-right: 2px solid rgba(195, 190, 253, 0.45);
+  }
+
+  :root[data-theme="light"] .message-md-pre {
+    border-color: rgba(98, 113, 177, 0.24);
+    background: rgba(235, 240, 255, 0.82);
+  }
+
+  :root[data-theme="light"] .message-md-code-inline {
+    border-color: rgba(98, 113, 177, 0.3);
+    background: rgba(236, 241, 255, 0.88);
+  }
+
+  :root[data-theme="light"] .message-md-blockquote {
+    border-left-color: rgba(122, 92, 255, 0.5);
+    color: rgba(38, 48, 86, 0.9);
+  }
+
+  :root[data-theme="light"] [dir="rtl"] .message-md-blockquote {
+    border-right-color: rgba(122, 92, 255, 0.5);
   }
 
   .message-actions-row {
@@ -295,6 +482,16 @@ body {
 
     .message-content--peer .message-actions-row {
       left: 0;
+    }
+
+    [dir="rtl"] .message-content--own .message-actions-row {
+      left: 0;
+      right: auto;
+    }
+
+    [dir="rtl"] .message-content--peer .message-actions-row {
+      right: 0;
+      left: auto;
     }
 
     .message-content:hover .message-actions-row,

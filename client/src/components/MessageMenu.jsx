@@ -1,14 +1,25 @@
 import React, { useEffect, useRef, useState } from "react";
+import { useLocale } from "../../context/LocaleContext";
 
 const MessageMenu = ({
   canEdit = false,
+  canDelete = canEdit,
+  canReply = true,
+  canToggleStar = true,
+  canForward = true,
+  canReport = true,
+  isStarred = false,
   onReply,
+  onToggleStar,
+  onForward,
+  onReport,
   onEdit,
   onDelete,
   isOpen,
   onOpenChange,
   closeSignal = 0,
 }) => {
+  const { isRtl, t } = useLocale();
   const [internalOpen, setInternalOpen] = useState(false);
   const menuRef = useRef(null);
   const triggerRef = useRef(null);
@@ -76,7 +87,7 @@ const MessageMenu = ({
         type="button"
         onClick={() => setOpen((prev) => !prev)}
         className="h-7 w-7 rounded-full text-xs text-white/60 hover:bg-white/10"
-        aria-label="Message actions"
+        aria-label={t("messageMenu.messageActions")}
         aria-haspopup="menu"
         aria-expanded={open}
       >
@@ -86,20 +97,63 @@ const MessageMenu = ({
       {open && (
         <div
           role="menu"
-          aria-label="Message actions menu"
-          className="absolute top-8 right-0 z-30 w-36 rounded-xl menu-surface p-1.5"
+          aria-label={t("messageMenu.messageActionsMenu")}
+          className={`absolute top-8 z-30 w-36 rounded-xl menu-surface p-1.5 ${
+            isRtl ? "left-0" : "right-0"
+          }`}
         >
-          <button
-            type="button"
-            onClick={() => {
-              onReply?.();
-              setOpen(false);
-            }}
-            role="menuitem"
-            className="w-full text-left px-3 py-1.5 text-xs rounded-lg hover:bg-white/10"
-          >
-            Reply
-          </button>
+          {canReply && (
+            <button
+              type="button"
+              onClick={() => {
+                onReply?.();
+                setOpen(false);
+              }}
+              role="menuitem"
+              className="w-full text-start px-3 py-1.5 text-xs rounded-lg hover:bg-white/10"
+            >
+              {t("messageMenu.reply")}
+            </button>
+          )}
+          {canToggleStar && (
+            <button
+              type="button"
+              onClick={() => {
+                onToggleStar?.();
+                setOpen(false);
+              }}
+              role="menuitem"
+              className="w-full text-start px-3 py-1.5 text-xs rounded-lg hover:bg-white/10"
+            >
+              {isStarred ? t("messageMenu.unstar") : t("messageMenu.star")}
+            </button>
+          )}
+          {canForward && (
+            <button
+              type="button"
+              onClick={() => {
+                onForward?.();
+                setOpen(false);
+              }}
+              role="menuitem"
+              className="w-full text-start px-3 py-1.5 text-xs rounded-lg hover:bg-white/10"
+            >
+              {t("messageMenu.forward")}
+            </button>
+          )}
+          {canReport && (
+            <button
+              type="button"
+              onClick={() => {
+                onReport?.();
+                setOpen(false);
+              }}
+              role="menuitem"
+              className="w-full text-start px-3 py-1.5 text-xs rounded-lg hover:bg-white/10 text-amber-100"
+            >
+              {t("messageMenu.report")}
+            </button>
+          )}
 
           {canEdit && (
             <button
@@ -109,13 +163,13 @@ const MessageMenu = ({
                 setOpen(false);
               }}
               role="menuitem"
-              className="w-full text-left px-3 py-1.5 text-xs rounded-lg hover:bg-white/10"
+              className="w-full text-start px-3 py-1.5 text-xs rounded-lg hover:bg-white/10"
             >
-              Edit
+              {t("messageMenu.edit")}
             </button>
           )}
 
-          {canEdit && (
+          {canDelete && (
             <button
               type="button"
               onClick={() => {
@@ -123,9 +177,9 @@ const MessageMenu = ({
                 setOpen(false);
               }}
               role="menuitem"
-              className="w-full text-left px-3 py-1.5 text-xs rounded-lg hover:bg-white/10 text-rose-200"
+              className="w-full text-start px-3 py-1.5 text-xs rounded-lg hover:bg-white/10 text-rose-200"
             >
-              Delete
+              {t("messageMenu.delete")}
             </button>
           )}
         </div>

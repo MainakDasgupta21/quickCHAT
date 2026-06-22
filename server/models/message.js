@@ -18,6 +18,8 @@ const fileSchema = new mongoose.Schema(
     name: { type: String },
     type: { type: String },
     size: { type: Number },
+    publicId: { type: String, default: "" },
+    resourceType: { type: String, default: "" },
   },
   { _id: false }
 );
@@ -26,6 +28,26 @@ const audioSchema = new mongoose.Schema(
   {
     url: { type: String },
     duration: { type: Number, default: 0 },
+    publicId: { type: String, default: "" },
+    resourceType: { type: String, default: "" },
+  },
+  { _id: false }
+);
+
+const previewSchema = new mongoose.Schema(
+  {
+    url: { type: String, default: "" },
+    title: { type: String, default: "" },
+    description: { type: String, default: "" },
+    image: { type: String, default: "" },
+    siteName: { type: String, default: "" },
+    status: {
+      type: String,
+      enum: ["pending", "ready", "failed"],
+      default: "pending",
+    },
+    fetchedAt: { type: Date, default: null },
+    error: { type: String, default: "" },
   },
   { _id: false }
 );
@@ -75,12 +97,48 @@ const messageSchema = new mongoose.Schema(
     },
     text: { type: String, default: "" },
     image: { type: String, default: "" },
+    imagePublicId: { type: String, default: "" },
+    imageResourceType: { type: String, default: "" },
     file: { type: fileSchema, default: null },
     audio: { type: audioSchema, default: null },
     replyTo: {
       type: mongoose.Schema.Types.ObjectId,
       ref: "Message",
       default: null,
+    },
+    threadRoot: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: "Message",
+      default: null,
+    },
+    replyCount: { type: Number, default: 0, min: 0 },
+    mentions: {
+      type: [
+        {
+          type: mongoose.Schema.Types.ObjectId,
+          ref: "User",
+        },
+      ],
+      default: [],
+    },
+    preview: { type: previewSchema, default: null },
+    sendAt: { type: Date, default: null },
+    releasedAt: { type: Date, default: null },
+    expiresAt: { type: Date, default: null },
+    disappearAfterMs: { type: Number, default: null, min: 0 },
+    scheduledStatus: {
+      type: String,
+      enum: ["pending", "processing", "released"],
+      default: "released",
+    },
+    starredBy: {
+      type: [
+        {
+          type: mongoose.Schema.Types.ObjectId,
+          ref: "User",
+        },
+      ],
+      default: [],
     },
     reactions: { type: [reactionSchema], default: [] },
     status: {
@@ -108,6 +166,27 @@ messageSchema.index({ receiverId: 1, seen: 1 });
 messageSchema.index({ senderId: 1, clientId: 1 }, { sparse: true });
 messageSchema.index({ conversationId: 1, createdAt: -1, _id: -1 });
 messageSchema.index({ conversationId: 1, senderId: 1, clientId: 1 }, { sparse: true });
+messageSchema.index({ conversationId: 1, threadRoot: 1, createdAt: 1, _id: 1 });
+messageSchema.index({ mentions: 1, createdAt: -1 });
+messageSchema.index({ starredBy: 1, createdAt: -1 });
+messageSchema.index(
+  { scheduledStatus: 1, sendAt: 1, _id: 1 },
+  {
+    partialFilterExpression: {
+      scheduledStatus: "pending",
+      sendAt: { $type: "date" },
+    },
+  }
+);
+messageSchema.index(
+  { isDeleted: 1, expiresAt: 1, _id: 1 },
+  {
+    partialFilterExpression: {
+      isDeleted: false,
+      expiresAt: { $type: "date" },
+    },
+  }
+);
 
 
 const Message = mongoose.model("Message", messageSchema);

@@ -2,6 +2,7 @@ import React, { Suspense, lazy, useContext } from "react";
 import { Navigate, Route, Routes } from "react-router-dom";
 import { Toaster } from "react-hot-toast";
 import { AuthContext } from "../context/AuthContext";
+import { useLocale } from "../context/LocaleContext";
 import AppSplash from "./components/AppSplash";
 
 // Route-level code splitting keeps the initial bundle small: a logged-out user
@@ -11,16 +12,19 @@ const ProfilePage = lazy(() => import("./pages/ProfilePage"));
 const LoginPage = lazy(() => import("./pages/LoginPage"));
 
 export const App = () => {
-  const { authUser, connectionStatus, isAuthLoading } = useContext(AuthContext);
+  const { authUser, connectionStatus, isAuthLoading, theme = "dark" } =
+    useContext(AuthContext);
+  const { isRtl, t } = useLocale();
+  const isLightTheme = theme === "light";
 
   if (isAuthLoading) {
-    return <AppSplash label="Restoring your session..." />;
+    return <AppSplash label={t("app.splashRestoringSession")} />;
   }
 
   return (
-    <div className="relative min-h-screen overflow-hidden">
-      <div className="absolute inset-0 -z-20 bg-[radial-gradient(circle_at_12%_8%,rgba(138,101,255,0.34),transparent_30%),radial-gradient(circle_at_84%_14%,rgba(86,146,250,0.24),transparent_30%),radial-gradient(circle_at_54%_92%,rgba(126,76,244,0.22),transparent_35%)]" />
-      <div className="absolute inset-0 -z-10 bg-[url('/bgImage.svg')] bg-cover bg-center opacity-20" />
+    <div className="app-shell relative min-h-screen overflow-hidden">
+      <div className="app-ambient absolute inset-0 -z-20" />
+      <div className="app-texture absolute inset-0 -z-10 bg-[url('/bgImage.svg')] bg-cover bg-center" />
       {authUser && connectionStatus !== "connected" && (
         <div
           role="status"
@@ -29,29 +33,40 @@ export const App = () => {
           className="absolute top-0 left-0 right-0 z-50 px-4 py-2 text-center text-xs font-medium border-b border-amber-300/20 bg-amber-300/14 text-amber-100 backdrop-blur-md"
         >
           {connectionStatus === "connecting"
-            ? "Connecting to quickCHAT real-time services..."
-            : "Reconnecting... messages will sync once connected."}
+            ? t("app.connectingRealtime")
+            : t("app.reconnectingRealtime")}
         </div>
       )}
       <Toaster
-        position="top-right"
+        position={isRtl ? "top-left" : "top-right"}
         gutter={12}
         toastOptions={{
           duration: 2800,
           style: {
-            background:
-              "linear-gradient(160deg, rgba(36,30,59,0.9), rgba(20,17,34,0.88))",
-            color: "#efecff",
-            border: "1px solid rgba(207,212,255,0.24)",
+            background: isLightTheme
+              ? "linear-gradient(160deg, rgba(255,255,255,0.96), rgba(243,247,255,0.96))"
+              : "linear-gradient(160deg, rgba(36,30,59,0.9), rgba(20,17,34,0.88))",
+            color: isLightTheme ? "#1c2444" : "#efecff",
+            border: isLightTheme
+              ? "1px solid rgba(101,116,179,0.26)"
+              : "1px solid rgba(207,212,255,0.24)",
             borderRadius: "14px",
-            boxShadow: "0 16px 48px rgba(9, 8, 20, 0.48)",
+            boxShadow: isLightTheme
+              ? "0 16px 42px rgba(106, 119, 180, 0.28)"
+              : "0 16px 48px rgba(9, 8, 20, 0.48)",
             backdropFilter: "blur(10px)",
           },
           success: {
-            iconTheme: { primary: "#20c983", secondary: "#0f0d18" },
+            iconTheme: {
+              primary: "#20c983",
+              secondary: isLightTheme ? "#f4f7ff" : "#0f0d18",
+            },
           },
           error: {
-            iconTheme: { primary: "#ef4f6e", secondary: "#0f0d18" },
+            iconTheme: {
+              primary: "#ef4f6e",
+              secondary: isLightTheme ? "#f4f7ff" : "#0f0d18",
+            },
           },
         }}
       />

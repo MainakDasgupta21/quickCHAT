@@ -92,6 +92,15 @@ JWT_SECRET=your_secret_key
 CLOUDINARY_CLOUD_NAME=xxxx
 CLOUDINARY_API_KEY=xxxx
 CLOUDINARY_API_SECRET=xxxx
+VAPID_PUBLIC_KEY=your_vapid_public_key
+VAPID_PRIVATE_KEY=your_vapid_private_key
+VAPID_SUBJECT=mailto:you@example.com
+```
+
+Generate VAPID keys once with:
+
+```bash
+npx web-push generate-vapid-keys
 ```
 
 Run backend:

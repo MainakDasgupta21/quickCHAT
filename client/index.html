@@ -4,9 +4,10 @@
     <meta charset="UTF-8" />
     <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
     <link rel="apple-touch-icon" href="/favicon.svg" />
+    <link rel="manifest" href="/manifest.webmanifest" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
     <meta name="theme-color" content="#0f0d18" />
-    <meta name="color-scheme" content="dark" />
+    <meta name="color-scheme" content="dark light" />
     <meta
       name="description"
       content="quickCHAT is a premium real-time messaging experience with instant delivery, voice notes, reactions, and read receipts."
@@ -20,6 +21,35 @@
       content="Instant, elegant conversations with voice notes, reactions, replies, and read receipts."
     />
     <meta name="twitter:card" content="summary_large_image" />
+    <script>
+      (() => {
+        try {
+          const storedLocale = localStorage.getItem("quickchat-locale");
+          const locale = storedLocale === "ar" ? "ar" : "en";
+          const storedTheme = localStorage.getItem("quickchat-theme");
+          const theme = storedTheme === "light" ? "light" : "dark";
+          const rootElement = document.documentElement;
+          rootElement.lang = locale;
+          rootElement.dir = locale === "ar" ? "rtl" : "ltr";
+          rootElement.dataset.theme = theme;
+          rootElement.style.colorScheme = theme;
+
+          const themeColorMeta = document.querySelector('meta[name="theme-color"]');
+          const colorSchemeMeta = document.querySelector('meta[name="color-scheme"]');
+          if (themeColorMeta) {
+            themeColorMeta.setAttribute(
+              "content",
+              theme === "light" ? "#f4f7ff" : "#0f0d18"
+            );
+          }
+          if (colorSchemeMeta) {
+            colorSchemeMeta.setAttribute("content", theme);
+          }
+        } catch {
+          // no-op: fallback to default dark theme
+        }
+      })();
+    </script>
   </head>
   <body>
     <div id="root"></div>

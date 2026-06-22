@@ -1,0 +1,24 @@
+{
+  "name": "quickCHAT",
+  "short_name": "quickCHAT",
+  "description": "quickCHAT is a premium real-time messaging experience.",
+  "start_url": "/",
+  "scope": "/",
+  "display": "standalone",
+  "background_color": "#0f0d18",
+  "theme_color": "#0f0d18",
+  "icons": [
+    {
+      "src": "/favicon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any"
+    },
+    {
+      "src": "/favicon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "maskable"
+    }
+  ]
+}

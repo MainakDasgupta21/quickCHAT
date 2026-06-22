@@ -25,3 +25,21 @@ export const messageSendRateLimiter = createJsonRateLimiter({
         max: Number(process.env.MESSAGE_SEND_RATE_LIMIT_MAX || 45),
         message: "Too many messages sent. Please slow down and try again.",
 });
+
+export const unfurlRateLimiter = createJsonRateLimiter({
+        windowMs: 60 * 1000,
+        max: Number(process.env.UNFURL_RATE_LIMIT_MAX || 25),
+        message: "Too many link preview requests. Please try again shortly.",
+});
+
+export const blockActionRateLimiter = createJsonRateLimiter({
+        windowMs: 60 * 60 * 1000,
+        max: Number(process.env.BLOCK_ACTION_RATE_LIMIT_MAX || 80),
+        message: "Too many block actions. Please try again later.",
+});
+
+export const reportActionRateLimiter = createJsonRateLimiter({
+        windowMs: 60 * 60 * 1000,
+        max: Number(process.env.REPORT_ACTION_RATE_LIMIT_MAX || 40),
+        message: "Too many reports submitted. Please try again later.",
+});

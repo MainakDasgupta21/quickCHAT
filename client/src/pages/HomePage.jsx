@@ -9,6 +9,9 @@ import React, {
 import Sidebar from "../components/Sidebar";
 import ChatContainer from "../components/ChatContainer";
 import RightSidebar from "../components/RightSidebar";
+import Lightbox from "../components/Lightbox";
+import GlobalSearchModal from "../components/GlobalSearchModal";
+import StarredMessagesModal from "../components/StarredMessagesModal";
 import { ChatContext } from "../../context/ChatContext";
 import { useKeyboardShortcuts } from "../hooks/useKeyboardShortcuts";
 
@@ -23,10 +26,15 @@ const HomePage = () => {
   const [keyboardUserIds, setKeyboardUserIds] = useState([]);
   const [isSidebarMenuOpen, setIsSidebarMenuOpen] = useState(false);
   const [isChatOverlayOpen, setIsChatOverlayOpen] = useState(false);
+  const [lightboxItems, setLightboxItems] = useState([]);
+  const [lightboxIndex, setLightboxIndex] = useState(0);
+  const [isGlobalSearchOpen, setIsGlobalSearchOpen] = useState(false);
+  const [isStarredMessagesOpen, setIsStarredMessagesOpen] = useState(false);
   const shortcutsBackdropRef = useRef(null);
   const shortcutsDialogRef = useRef(null);
   const shortcutsCloseButtonRef = useRef(null);
   const shortcutsTriggerRef = useRef(null);
+  const isLightboxOpen = lightboxItems.length > 0;
 
   const navigationConversations = useMemo(() => {
     if (!conversations.length) return [];
@@ -62,10 +70,46 @@ const HomePage = () => {
   }, [navigationConversations, selectedConversation]);
 
   const focusSearch = useCallback(() => {
+    setIsGlobalSearchOpen(true);
     setFocusSearchSignal((prev) => prev + 1);
   }, []);
 
+  const handleOpenLightbox = useCallback((items, startIndex = 0) => {
+    if (!Array.isArray(items) || !items.length) return;
+    const normalizedItems = items.filter((item) => item?.url);
+    if (!normalizedItems.length) return;
+
+    const requestedIndex = Number(startIndex) || 0;
+    const safeIndex = Math.min(
+      normalizedItems.length - 1,
+      Math.max(0, requestedIndex)
+    );
+
+    setLightboxItems(normalizedItems);
+    setLightboxIndex(safeIndex);
+  }, []);
+
+  const handleCloseLightbox = useCallback(() => {
+    setLightboxItems([]);
+    setLightboxIndex(0);
+  }, []);
+
   const handleEscape = useCallback(() => {
+    if (isLightboxOpen) {
+      handleCloseLightbox();
+      return;
+    }
+
+    if (isGlobalSearchOpen) {
+      setIsGlobalSearchOpen(false);
+      return;
+    }
+
+    if (isStarredMessagesOpen) {
+      setIsStarredMessagesOpen(false);
+      return;
+    }
+
     if (isShortcutsOpen) {
       setIsShortcutsOpen(false);
       return;
@@ -80,7 +124,11 @@ const HomePage = () => {
       setSelectedConversation(null);
     }
   }, [
+    handleCloseLightbox,
     isChatOverlayOpen,
+    isGlobalSearchOpen,
+    isLightboxOpen,
+    isStarredMessagesOpen,
     isShortcutsOpen,
     isSidebarMenuOpen,
     selectedConversation,
@@ -159,7 +207,13 @@ const HomePage = () => {
     setIsShortcutsOpen((prev) => !prev);
   }, []);
 
-  const isAnyOverlayOpen = isShortcutsOpen || isSidebarMenuOpen || isChatOverlayOpen;
+  const isAnyOverlayOpen =
+    isShortcutsOpen ||
+    isSidebarMenuOpen ||
+    isChatOverlayOpen ||
+    isLightboxOpen ||
+    isGlobalSearchOpen ||
+    isStarredMessagesOpen;
 
   useKeyboardShortcuts({
     onFocusSearch: focusSearch,
@@ -221,14 +275,31 @@ const HomePage = () => {
           onFilteredUsersChange={handleFilteredUsersChange}
           onMenuOpenChange={handleSidebarMenuOpenChange}
           onKeyboardUserHover={handleKeyboardUserHover}
+          onOpenStarredMessages={() => setIsStarredMessagesOpen(true)}
         />
         <ChatContainer
           sendShortcutSignal={sendShortcutSignal}
           escapeSignal={escapeSignal}
           onOverlayOpenChange={setIsChatOverlayOpen}
+          onOpenLightbox={handleOpenLightbox}
         />
-        <RightSidebar />
+        <RightSidebar onOpenLightbox={handleOpenLightbox} />
       </div>
+
+      <Lightbox
+        items={lightboxItems}
+        activeIndex={lightboxIndex}
+        onChangeIndex={setLightboxIndex}
+        onClose={handleCloseLightbox}
+      />
+      <GlobalSearchModal
+        isOpen={isGlobalSearchOpen}
+        onClose={() => setIsGlobalSearchOpen(false)}
+      />
+      <StarredMessagesModal
+        isOpen={isStarredMessagesOpen}
+        onClose={() => setIsStarredMessagesOpen(false)}
+      />
 
       <button
         ref={shortcutsTriggerRef}
@@ -282,7 +353,7 @@ const HomePage = () => {
               </button>
             </div>
             <div className="space-y-2 text-sm text-white/80">
-              <p><span className="text-white/50">Cmd/Ctrl + K</span> Focus search</p>
+              <p><span className="text-white/50">Cmd/Ctrl + K</span> Open global search</p>
               <p><span className="text-white/50">Arrow Up/Down</span> Browse conversations</p>
               <p><span className="text-white/50">Enter</span> Open selected conversation</p>
               <p><span className="text-white/50">Cmd/Ctrl + Enter</span> Send message</p>

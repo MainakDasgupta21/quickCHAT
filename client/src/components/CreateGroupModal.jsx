@@ -1,14 +1,15 @@
 import React, { useEffect, useMemo, useState } from "react";
 import assets from "../assets/assets";
 import { toNormalizedId } from "../lib/conversations";
+import { useLocale } from "../../context/LocaleContext";
 
 const CreateGroupModal = ({
   isOpen,
   onClose,
   contacts = [],
   onSubmit,
-  title = "Create group",
-  submitLabel = "Create",
+  title = "",
+  submitLabel = "",
   showGroupName = true,
   initialGroupName = "",
   initialSelectedIds = [],
@@ -18,6 +19,9 @@ const CreateGroupModal = ({
   const [groupName, setGroupName] = useState(initialGroupName);
   const [query, setQuery] = useState("");
   const [selectedIds, setSelectedIds] = useState(() => new Set(initialSelectedIds));
+  const { t } = useLocale();
+  const resolvedTitle = title || t("sidebar.newGroup");
+  const resolvedSubmitLabel = submitLabel || t("common.submit");
 
   useEffect(() => {
     if (!isOpen) return;
@@ -79,7 +83,7 @@ const CreateGroupModal = ({
       className="fixed inset-0 z-[120] bg-black/55 backdrop-blur-sm flex items-center justify-center p-4"
       role="dialog"
       aria-modal="true"
-      aria-label={title}
+      aria-label={resolvedTitle}
       onMouseDown={(event) => {
         if (event.currentTarget === event.target && !isSubmitting) {
           onClose?.();
@@ -89,12 +93,12 @@ const CreateGroupModal = ({
       <div className="w-full max-w-lg rounded-3xl border border-white/16 bg-[linear-gradient(180deg,rgba(31,27,50,0.98),rgba(15,13,24,0.98))] shadow-soft overflow-hidden">
         <form onSubmit={handleSubmit}>
           <div className="px-5 py-4 border-b border-white/10 flex items-center justify-between gap-3">
-            <h3 className="text-base font-semibold text-white">{title}</h3>
+            <h3 className="text-base font-semibold text-white">{resolvedTitle}</h3>
             <button
               type="button"
               onClick={() => !isSubmitting && onClose?.()}
               className="icon-btn h-9 w-9 rounded-xl"
-              aria-label="Close group modal"
+              aria-label={t("createGroupModal.closeAria")}
             >
               ×
             </button>
@@ -103,25 +107,25 @@ const CreateGroupModal = ({
           <div className="px-5 py-4 space-y-3">
             {showGroupName && (
               <label className="block">
-                <span className="text-xs text-white/60">Group name</span>
+                <span className="text-xs text-white/60">{t("createGroupModal.groupNameLabel")}</span>
                 <input
                   value={groupName}
                   onChange={(event) => setGroupName(event.target.value)}
                   maxLength={80}
-                  placeholder="e.g. Product Team"
+                  placeholder={t("createGroupModal.groupNamePlaceholder")}
                   className="mt-1 w-full rounded-xl border border-white/15 bg-white/8 px-3 py-2.5 text-sm text-white placeholder:text-white/45"
                 />
               </label>
             )}
 
             <label className="block">
-              <span className="text-xs text-white/60">Add participants</span>
+              <span className="text-xs text-white/60">{t("createGroupModal.addParticipants")}</span>
               <div className="mt-1 rounded-xl border border-white/15 bg-white/8 px-3 py-2.5 flex items-center gap-2">
                 <img src={assets.search_icon} alt="" className="h-3.5 w-3.5 opacity-70" />
                 <input
                   value={query}
                   onChange={(event) => setQuery(event.target.value)}
-                  placeholder="Search people..."
+                  placeholder={t("createGroupModal.searchPeoplePlaceholder")}
                   className="bg-transparent text-sm text-white placeholder:text-white/45 flex-1 outline-none"
                 />
               </div>
@@ -130,7 +134,7 @@ const CreateGroupModal = ({
             <div className="max-h-64 overflow-y-auto space-y-1 rounded-xl border border-white/12 bg-white/[0.03] p-2">
               {filteredContacts.length === 0 && (
                 <p className="text-xs text-white/55 text-center py-5">
-                  No contacts match your search.
+                  {t("createGroupModal.noContactsFound")}
                 </p>
               )}
 
@@ -142,7 +146,7 @@ const CreateGroupModal = ({
                     key={contactId}
                     type="button"
                     onClick={() => toggleSelection(contactId)}
-                    className={`w-full flex items-center gap-3 px-2.5 py-2 rounded-xl border text-left transition ${
+                    className={`w-full flex items-center gap-3 px-2.5 py-2 rounded-xl border text-start transition ${
                       isSelected
                         ? "border-brand-300/55 bg-brand-500/18"
                         : "border-transparent hover:border-white/15 hover:bg-white/7"
@@ -156,7 +160,7 @@ const CreateGroupModal = ({
                     <div className="min-w-0 flex-1">
                       <p className="text-sm text-white truncate">{contact.fullName}</p>
                       <p className="text-xs text-white/55 truncate">
-                        {contact.bio || "No bio"}
+                        {contact.bio || t("createGroupModal.noBio")}
                       </p>
                     </div>
                     <span
@@ -174,7 +178,13 @@ const CreateGroupModal = ({
 
           <div className="px-5 py-4 border-t border-white/10 flex items-center justify-between gap-3">
             <p className="text-xs text-white/60">
-              {selectedCount} {selectedCount === 1 ? "person" : "people"} selected
+              {t("createGroupModal.selectedCount", {
+                count: selectedCount,
+                label:
+                  selectedCount === 1
+                    ? t("createGroupModal.person")
+                    : t("createGroupModal.people"),
+              })}
             </p>
             <button
               type="submit"
@@ -185,7 +195,7 @@ const CreateGroupModal = ({
               }
               className="btn-gradient px-4 py-2 rounded-xl text-sm font-medium disabled:opacity-45 disabled:cursor-not-allowed"
             >
-              {isSubmitting ? "Please wait..." : submitLabel}
+              {isSubmitting ? t("loginPage.pleaseWait") : resolvedSubmitLabel}
             </button>
           </div>
         </form>
