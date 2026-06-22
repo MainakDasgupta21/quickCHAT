@@ -3,6 +3,13 @@ import assets from "../assets/assets";
 import { toNormalizedId } from "../lib/conversations";
 import { useLocale } from "../../context/LocaleContext";
 
+const EMPTY_ID_LIST = [];
+
+const normalizeIdList = (ids) =>
+  (Array.isArray(ids) ? ids : [])
+    .map((id) => toNormalizedId(id))
+    .filter(Boolean);
+
 const CreateGroupModal = ({
   isOpen,
   onClose,
@@ -12,26 +19,36 @@ const CreateGroupModal = ({
   submitLabel = "",
   showGroupName = true,
   initialGroupName = "",
-  initialSelectedIds = [],
-  excludedUserIds = [],
+  initialSelectedIds = EMPTY_ID_LIST,
+  excludedUserIds = EMPTY_ID_LIST,
   isSubmitting = false,
 }) => {
   const [groupName, setGroupName] = useState(initialGroupName);
   const [query, setQuery] = useState("");
-  const [selectedIds, setSelectedIds] = useState(() => new Set(initialSelectedIds));
+  const [selectedIds, setSelectedIds] = useState(
+    () => new Set(normalizeIdList(initialSelectedIds))
+  );
   const { t } = useLocale();
   const resolvedTitle = title || t("sidebar.newGroup");
   const resolvedSubmitLabel = submitLabel || t("common.submit");
+  const normalizedInitialSelectedIdsKey = useMemo(
+    () => [...normalizeIdList(initialSelectedIds)].sort().join("|"),
+    [initialSelectedIds]
+  );
+  const normalizedInitialSelectedIds = useMemo(
+    () => (normalizedInitialSelectedIdsKey ? normalizedInitialSelectedIdsKey.split("|") : []),
+    [normalizedInitialSelectedIdsKey]
+  );
 
   useEffect(() => {
     if (!isOpen) return;
     setGroupName(initialGroupName || "");
     setQuery("");
-    setSelectedIds(new Set(initialSelectedIds.map((id) => toNormalizedId(id))));
-  }, [initialGroupName, initialSelectedIds, isOpen]);
+    setSelectedIds(new Set(normalizedInitialSelectedIds));
+  }, [initialGroupName, isOpen, normalizedInitialSelectedIds]);
 
   const excludedIdsSet = useMemo(
-    () => new Set(excludedUserIds.map((id) => toNormalizedId(id))),
+    () => new Set(normalizeIdList(excludedUserIds)),
     [excludedUserIds]
   );
 
