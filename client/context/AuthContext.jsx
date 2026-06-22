@@ -3,6 +3,7 @@ import axios from "axios";
 import toast from "react-hot-toast";
 import { io } from "socket.io-client";
 import { playReceiveSound, playSendSound } from "../src/lib/sound";
+import { getErrorMessage } from "../src/lib/utils";
 
 // eslint-disable-next-line react-refresh/only-export-components
 export const AuthContext = createContext();
@@ -15,6 +16,11 @@ export const AuthProvider = ({ children }) => {
   const [onlineUsers, setOnlineUsers] = useState([]);
   const [socket, setSocket] = useState(null);
   const [connectionStatus, setConnectionStatus] = useState("disconnected");
+  // True while we validate a persisted token on first load, so the app can show a
+  // splash instead of briefly flashing the login screen for already-authenticated users.
+  const [isAuthLoading, setIsAuthLoading] = useState(() =>
+    Boolean(localStorage.getItem("token"))
+  );
   const [soundEnabled, setSoundEnabled] = useState(() => {
     const storedValue = localStorage.getItem("quickchat-sound-enabled");
     if (storedValue === null) return true;
@@ -137,9 +143,15 @@ export const AuthProvider = ({ children }) => {
         connectSocket(data.user);
       }
     } catch (error) {
-      if (error.response?.status !== 401) {
-        toast.error(error.response?.data?.message || error.message);
+      if (error.response?.status === 401) {
+        // Persisted token is invalid/expired: clear it so we land on the login page.
+        localStorage.removeItem("token");
+        setToken(null);
+      } else {
+        toast.error(getErrorMessage(error));
       }
+    } finally {
+      setIsAuthLoading(false);
     }
   }, [connectSocket]);
 
@@ -154,11 +166,13 @@ export const AuthProvider = ({ children }) => {
         setToken(data.token);
         localStorage.setItem("token", data.token);
         toast.success(data.message);
-      } else {
-        toast.error(data.message);
+        return true;
       }
+      toast.error(data.message);
+      return false;
     } catch (error) {
-      toast.error(error.message);
+      toast.error(getErrorMessage(error));
+      return false;
     }
   };
 
@@ -181,10 +195,14 @@ export const AuthProvider = ({ children }) => {
       const { data } = await axios.put("/api/auth/update-profile", body);
       if (data.success) {
         setAuthUser(data.user);
-        toast.success("profile updated successfully");
+        toast.success("Profile updated successfully");
+        return true;
       }
+      toast.error(data.message || "Could not update profile");
+      return false;
     } catch (error) {
-      toast.error(error.response?.data?.message || error.message);
+      toast.error(getErrorMessage(error));
+      return false;
     }
   };
 
@@ -197,6 +215,7 @@ export const AuthProvider = ({ children }) => {
       setAuthUser(null);
       setOnlineUsers([]);
       setConnectionStatus("disconnected");
+      setIsAuthLoading(false);
       setSocket((existingSocket) => {
         existingSocket?.disconnect();
         return null;
@@ -220,6 +239,7 @@ export const AuthProvider = ({ children }) => {
     socket,
     setSocket,
     connectionStatus,
+    isAuthLoading,
     soundEnabled,
     toggleSound,
     notificationPermission,

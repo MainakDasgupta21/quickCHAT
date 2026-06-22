@@ -8,6 +8,7 @@ import {
 } from "react";
 import { AuthContext } from "./AuthContext";
 import toast from "react-hot-toast";
+import { getErrorMessage } from "../src/lib/utils";
 
 // eslint-disable-next-line react-refresh/only-export-components
 export const ChatContext = createContext();
@@ -78,7 +79,7 @@ export const ChatProvider = ({ children }) => {
           }
         }
       } catch (error) {
-        toast.error(error.message);
+        toast.error(getErrorMessage(error));
       } finally {
         setMessagesLoading(false);
       }
@@ -103,7 +104,7 @@ export const ChatProvider = ({ children }) => {
           toast.error(data.message);
         }
       } catch (error) {
-        toast.error(error.message);
+        toast.error(getErrorMessage(error));
       }
     },
     [axios, selectedUser?._id, playSendCue]
@@ -127,7 +128,7 @@ export const ChatProvider = ({ children }) => {
         );
         return true;
       } catch (error) {
-        toast.error(error.message);
+        toast.error(getErrorMessage(error));
         return false;
       }
     },
@@ -150,7 +151,7 @@ export const ChatProvider = ({ children }) => {
         );
         return true;
       } catch (error) {
-        toast.error(error.message);
+        toast.error(getErrorMessage(error));
         return false;
       }
     },
@@ -178,7 +179,7 @@ export const ChatProvider = ({ children }) => {
         );
         return true;
       } catch (error) {
-        toast.error(error.message);
+        toast.error(getErrorMessage(error));
         return false;
       }
     },
@@ -201,7 +202,7 @@ export const ChatProvider = ({ children }) => {
         toast.error(data.message);
         return [];
       } catch (error) {
-        toast.error(error.message);
+        toast.error(getErrorMessage(error));
         return [];
       }
     },
@@ -248,7 +249,7 @@ export const ChatProvider = ({ children }) => {
             messageIds: [newMessage._id],
           });
         } catch (error) {
-          toast.error(error.message);
+          toast.error(getErrorMessage(error));
         }
       } else {
         setUnseenMessages((prevUnseenMessages) => ({

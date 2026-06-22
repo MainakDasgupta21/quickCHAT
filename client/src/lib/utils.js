@@ -41,3 +41,16 @@ export function formatDuration(seconds = 0) {
   const secs = String(totalSeconds % 60).padStart(2, "0");
   return `${mins}:${secs}`;
 }
+
+// Extracts the most useful, human-readable message from an Axios/network error.
+// The API returns actionable messages in `response.data.message`; falling back to
+// `error.message` (e.g. "Request failed with status code 400") loses that context.
+export function getErrorMessage(error, fallback = "Something went wrong. Please try again.") {
+  return (
+    error?.response?.data?.message ||
+    error?.message ||
+    fallback
+  );
+}
+
+export const MAX_IMAGE_UPLOAD_BYTES = 5 * 1024 * 1024; // 5MB raw (~6.85MB once base64-encoded)

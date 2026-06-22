@@ -9,6 +9,7 @@ import React, {
 } from "react";
 import assets from "../assets/assets";
 import {
+  MAX_IMAGE_UPLOAD_BYTES,
   formatDateDividerLabel,
   formatFileSize,
   formatMessageTime,
@@ -100,6 +101,11 @@ const ChatContainer = ({
 
   const processFileInput = async (file, mode = "auto") => {
     if (!file) return;
+
+    if (file.size > MAX_IMAGE_UPLOAD_BYTES) {
+      toast.error("Attachment is too large. Please keep files under 5MB.");
+      return;
+    }
 
     const reader = new FileReader();
     reader.onloadend = () => {

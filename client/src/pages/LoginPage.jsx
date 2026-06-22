@@ -23,13 +23,17 @@ const LoginPage = () => {
     }
 
     setIsSubmitting(true);
-    await login(currState === "Sign Up" ? "signup" : "login", {
-      fullName,
-      email,
-      password,
-      bio,
-    });
+    const succeeded = await login(
+      currState === "Sign Up" ? "signup" : "login",
+      { fullName, email, password, bio }
+    );
     setIsSubmitting(false);
+
+    // If signup failed (e.g. email already in use), return to the first step so
+    // the user can correct their email/password instead of being stuck on bio.
+    if (!succeeded && currState === "Sign Up") {
+      setIsDataSubmitted(false);
+    }
   };
 
   return (

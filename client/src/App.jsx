@@ -1,13 +1,21 @@
-import React, { useContext } from "react";
+import React, { Suspense, lazy, useContext } from "react";
 import { Navigate, Route, Routes } from "react-router-dom";
-import HomePage from "./pages/HomePage";
-import ProfilePage from "./pages/ProfilePage";
-import LoginPage from "./pages/LoginPage";
 import { Toaster } from "react-hot-toast";
 import { AuthContext } from "../context/AuthContext";
+import AppSplash from "./components/AppSplash";
+
+// Route-level code splitting keeps the initial bundle small: a logged-out user
+// only downloads the login screen, not the full chat workspace + emoji picker.
+const HomePage = lazy(() => import("./pages/HomePage"));
+const ProfilePage = lazy(() => import("./pages/ProfilePage"));
+const LoginPage = lazy(() => import("./pages/LoginPage"));
 
 export const App = () => {
-  const { authUser, connectionStatus } = useContext(AuthContext);
+  const { authUser, connectionStatus, isAuthLoading } = useContext(AuthContext);
+
+  if (isAuthLoading) {
+    return <AppSplash label="Restoring your session..." />;
+  }
 
   return (
     <div className="relative min-h-screen overflow-hidden">
@@ -47,20 +55,23 @@ export const App = () => {
           },
         }}
       />
-      <Routes>
-        <Route
-          path="/"
-          element={authUser ? <HomePage /> : <Navigate to="/login" />}
-        />
-        <Route
-          path="/login"
-          element={!authUser ? <LoginPage /> : <Navigate to="/" />}
-        />
-        <Route
-          path="/profile"
-          element={authUser ? <ProfilePage /> : <Navigate to="/login" />}
-        />
-      </Routes>
+      <Suspense fallback={<AppSplash />}>
+        <Routes>
+          <Route
+            path="/"
+            element={authUser ? <HomePage /> : <Navigate to="/login" replace />}
+          />
+          <Route
+            path="/login"
+            element={!authUser ? <LoginPage /> : <Navigate to="/" replace />}
+          />
+          <Route
+            path="/profile"
+            element={authUser ? <ProfilePage /> : <Navigate to="/login" replace />}
+          />
+          <Route path="*" element={<Navigate to="/" replace />} />
+        </Routes>
+      </Suspense>
     </div>
   );
 };

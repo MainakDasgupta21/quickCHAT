@@ -23,6 +23,7 @@ const Sidebar = ({
   } = useContext(ChatContext);
 
   const {
+    authUser,
     logout,
     onlineUsers,
     soundEnabled,
@@ -37,6 +38,8 @@ const Sidebar = ({
   const searchInputRef = useRef(null);
   const menuTriggerRef = useRef(null);
   const hasFocusedMenuRef = useRef(false);
+  const hasFetchedUsersRef = useRef(false);
+  const knownUserIdsRef = useRef(new Set());
 
   const filteredUsers = useMemo(() => {
     if (!input.trim()) return users;
@@ -51,8 +54,29 @@ const Sidebar = ({
   }, [input, users]);
 
   useEffect(() => {
+    knownUserIdsRef.current = new Set(users.map((user) => user._id));
+  }, [users]);
+
+  // Load the conversation list once on mount.
+  useEffect(() => {
     getUsers();
-  }, [onlineUsers, getUsers]);
+    hasFetchedUsersRef.current = true;
+  }, [getUsers]);
+
+  // The server broadcasts the full online-user list to every client on each
+  // connect/disconnect. Refetching the entire sidebar (an N+1 query on the API)
+  // on every heartbeat is wasteful and causes flicker, so only refetch when an
+  // online user we have never seen appears (e.g. a brand-new signup). Presence
+  // dots stay live because they read from `onlineUsers` directly.
+  useEffect(() => {
+    if (!hasFetchedUsersRef.current) return;
+    const hasUnknownOnlineUser = onlineUsers.some(
+      (id) => id !== authUser?._id && !knownUserIdsRef.current.has(id)
+    );
+    if (hasUnknownOnlineUser) {
+      getUsers();
+    }
+  }, [onlineUsers, getUsers, authUser?._id]);
 
   useEffect(() => {
     onFilteredUsersChange(filteredUsers.map((user) => user._id));

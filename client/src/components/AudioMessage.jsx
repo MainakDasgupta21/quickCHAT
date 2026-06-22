@@ -18,8 +18,14 @@ const AudioMessage = ({ src, duration = 0 }) => {
       return;
     }
 
-    await audioElement.play();
-    setIsPlaying(true);
+    try {
+      await audioElement.play();
+      setIsPlaying(true);
+    } catch {
+      // Playback can be rejected (autoplay policy, decode error). Stay paused
+      // rather than throwing an unhandled rejection.
+      setIsPlaying(false);
+    }
   };
 
   return (

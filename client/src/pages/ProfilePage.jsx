@@ -1,7 +1,9 @@
 import React, { useContext, useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
+import toast from "react-hot-toast";
 import assets from "../assets/assets";
 import { AuthContext } from "../../context/AuthContext";
+import { MAX_IMAGE_UPLOAD_BYTES } from "../lib/utils";
 
 const ProfilePage = () => {
   const { authUser, updateProfile } = useContext(AuthContext);
@@ -31,25 +33,48 @@ const ProfilePage = () => {
     return () => URL.revokeObjectURL(objectUrl);
   }, [selectedImg, authUser?.profilePic]);
 
+  const handleSelectImage = (event) => {
+    const file = event.target.files?.[0];
+    if (!file) return;
+
+    if (!file.type.startsWith("image/")) {
+      toast.error("Please choose a PNG or JPG image.");
+      event.target.value = "";
+      return;
+    }
+
+    if (file.size > MAX_IMAGE_UPLOAD_BYTES) {
+      toast.error("Image is too large. Please pick one under 5MB.");
+      event.target.value = "";
+      return;
+    }
+
+    setSelectedImg(file);
+  };
+
   const handleSubmit = async (e) => {
     e.preventDefault();
     setIsSaving(true);
 
     if (!selectedImg) {
-      await updateProfile({ fullName: name, bio });
+      const ok = await updateProfile({ fullName: name, bio });
       setIsSaving(false);
-      navigate("/");
+      if (ok) navigate("/");
       return;
     }
 
     const reader = new FileReader();
-    reader.readAsDataURL(selectedImg);
     reader.onload = async () => {
       const base64Image = reader.result;
-      await updateProfile({ profilePic: base64Image, fullName: name, bio });
+      const ok = await updateProfile({ profilePic: base64Image, fullName: name, bio });
       setIsSaving(false);
-      navigate("/");
+      if (ok) navigate("/");
     };
+    reader.onerror = () => {
+      setIsSaving(false);
+      toast.error("Could not read that image. Please try another file.");
+    };
+    reader.readAsDataURL(selectedImg);
   };
 
   return (
@@ -87,13 +112,13 @@ const ProfilePage = () => {
               </div>
               <div>
                 <p className="text-sm text-white">Upload profile image</p>
-                <p className="text-xs text-white/55">PNG or JPG up to 4MB</p>
+                <p className="text-xs text-white/60">PNG or JPG up to 5MB</p>
               </div>
               <div className="ml-auto text-white/65 text-xs border border-white/15 rounded-lg px-2 py-1">
                 Change
               </div>
               <input
-                onChange={(e) => setSelectedImg(e.target.files[0])}
+                onChange={handleSelectImage}
                 type="file"
                 id="avatar"
                 accept=".png,.jpg,.jpeg"

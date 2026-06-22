@@ -270,7 +270,7 @@ body {
   }
 
   .field-input::placeholder {
-    color: rgba(236, 233, 255, 0.45);
+    color: rgba(236, 233, 255, 0.55);
   }
 
   .message-actions-row {
