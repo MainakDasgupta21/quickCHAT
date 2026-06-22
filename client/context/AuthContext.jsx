@@ -52,6 +52,14 @@ const toSupportedTheme = (themeValue) => {
   return normalizedTheme === "light" ? "light" : "dark";
 };
 
+const isLocalBackendUrl = (urlValue) =>
+  /^(https?:\/\/)?(localhost|127\.0\.0\.1)(:\d+)?(\/|$)/i.test(
+    String(urlValue || "").trim()
+  );
+
+const getSocketTransports = (urlValue) =>
+  isLocalBackendUrl(urlValue) ? ["polling", "websocket"] : ["websocket"];
+
 const getInitialTheme = () => {
   if (typeof window === "undefined") return DEFAULT_THEME;
   return toSupportedTheme(localStorage.getItem(THEME_STORAGE_KEY) || DEFAULT_THEME);
@@ -262,6 +270,7 @@ export const AuthProvider = ({ children }) => {
           auth: {
             token: socketToken,
           },
+          transports: getSocketTransports(backendUrl),
           reconnection: true,
           reconnectionAttempts: 8,
           reconnectionDelay: 800,
@@ -276,8 +285,13 @@ export const AuthProvider = ({ children }) => {
           setConnectionStatus("disconnected");
         });
 
-        newSocket.on("connect_error", () => {
+        newSocket.on("connect_error", (error) => {
           setConnectionStatus("disconnected");
+          const errorMessage = String(error?.message || "").toLowerCase();
+          if (errorMessage.includes("not authorized")) {
+            localStorage.removeItem("token");
+            setToken(null);
+          }
         });
 
         newSocket.connect();
@@ -560,7 +574,11 @@ export const AuthProvider = ({ children }) => {
   useEffect(() => {
     if (token) {
       axios.defaults.headers.common["token"] = token;
-      checkAuth();
+      if (authUser?._id) {
+        setIsAuthLoading(false);
+      } else {
+        checkAuth();
+      }
     } else {
       delete axios.defaults.headers.common["token"];
       setAuthUser(null);
@@ -573,7 +591,7 @@ export const AuthProvider = ({ children }) => {
         return null;
       });
     }
-  }, [token, checkAuth]);
+  }, [authUser?._id, token, checkAuth]);
 
   useEffect(() => {
     if (!authUser?._id) {
