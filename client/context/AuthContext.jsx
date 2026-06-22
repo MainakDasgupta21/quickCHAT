@@ -43,6 +43,7 @@ const normalizeAuthUserData = (userValue) => {
     ...userValue,
     _id: toNormalizedId(userValue._id),
     blockedUsers: toNormalizedBlockedUserIds(userValue.blockedUsers),
+    twoFactorEnabled: Boolean(userValue.twoFactorEnabled),
   };
 };
 
@@ -104,6 +105,20 @@ export const AuthProvider = ({ children }) => {
     );
     setBlockedUsers(payloadBlockedUsers);
     return payloadBlockedIds;
+  }, []);
+
+  const mergeAuthUser = useCallback((nextUserValue) => {
+    setAuthUser((previousUser) => {
+      const nextUser = normalizeAuthUserData(nextUserValue);
+      if (!nextUser && previousUser) return previousUser;
+      return {
+        ...(previousUser || {}),
+        ...(nextUser || {}),
+        blockedUsers: toNormalizedBlockedUserIds(
+          nextUser?.blockedUsers || previousUser?.blockedUsers
+        ),
+      };
+    });
   }, []);
 
   const toggleSound = useCallback(() => {
@@ -276,6 +291,24 @@ export const AuthProvider = ({ children }) => {
     [token]
   );
 
+  const applyAuthenticatedSession = useCallback(
+    ({ userData, token: authToken }) => {
+      const normalizedUser = normalizeAuthUserData(userData);
+      const normalizedToken = String(authToken || "").trim();
+      if (!normalizedUser || !normalizedToken) {
+        return false;
+      }
+
+      setAuthUser(normalizedUser);
+      connectSocket(normalizedUser, normalizedToken);
+      axios.defaults.headers.common.token = normalizedToken;
+      setToken(normalizedToken);
+      localStorage.setItem("token", normalizedToken);
+      return true;
+    },
+    [connectSocket]
+  );
+
   //check if user is authenticated and if so , set the user data and connect the socket
   const checkAuth = useCallback(async () => {
     try {
@@ -302,23 +335,109 @@ export const AuthProvider = ({ children }) => {
   const login = async (state, credentials) => {
     try {
       const { data } = await axios.post(`/api/auth/${state}`, credentials);
-      if (data.success) {
-        const normalizedUser = normalizeAuthUserData(data.userData);
-        setAuthUser(normalizedUser);
-        connectSocket(normalizedUser, data.token);
-        axios.defaults.headers.common["token"] = data.token;
-        setToken(data.token);
-        localStorage.setItem("token", data.token);
-        toast.success(data.message);
-        return true;
+      if (data.requiresTwoFactor) {
+        return {
+          ok: false,
+          requiresTwoFactor: true,
+          twoFactorToken: data.twoFactorToken,
+          message: data.message || t("auth.twoFactorRequired"),
+        };
       }
-      toast.error(data.message);
-      return false;
+      if (data.success) {
+        const sessionApplied = applyAuthenticatedSession(data);
+        if (!sessionApplied) {
+          toast.error(t("auth.loginFailed"));
+          return { ok: false };
+        }
+        toast.success(data.message);
+        return { ok: true };
+      }
+      toast.error(data.message || t("auth.loginFailed"));
+      return { ok: false, message: data.message };
     } catch (error) {
-      toast.error(getErrorMessage(error));
-      return false;
+      toast.error(getErrorMessage(error, t("auth.loginFailed")));
+      return { ok: false, message: getErrorMessage(error) };
     }
   };
+
+  const verifyTwoFactorLogin = useCallback(
+    async ({ twoFactorToken, code }) => {
+      try {
+        const { data } = await axios.post("/api/auth/2fa/login/verify", {
+          twoFactorToken,
+          code,
+        });
+        if (data.success) {
+          const sessionApplied = applyAuthenticatedSession(data);
+          if (!sessionApplied) {
+            toast.error(t("auth.loginFailed"));
+            return false;
+          }
+          toast.success(data.message || t("auth.loginSuccess"));
+          return true;
+        }
+        toast.error(data.message || t("auth.twoFactorVerifyFailed"));
+        return false;
+      } catch (error) {
+        toast.error(getErrorMessage(error, t("auth.twoFactorVerifyFailed")));
+        return false;
+      }
+    },
+    [applyAuthenticatedSession, t]
+  );
+
+  const beginTwoFactorSetup = useCallback(async () => {
+    try {
+      const { data } = await axios.post("/api/auth/2fa/setup");
+      if (!data.success) {
+        toast.error(data.message || t("auth.twoFactorSetupStartFailed"));
+        return null;
+      }
+      toast.success(data.message || t("auth.twoFactorSetupStarted"));
+      return data.setup || null;
+    } catch (error) {
+      toast.error(getErrorMessage(error, t("auth.twoFactorSetupStartFailed")));
+      return null;
+    }
+  }, [t]);
+
+  const enableTwoFactor = useCallback(
+    async ({ code }) => {
+      try {
+        const { data } = await axios.post("/api/auth/2fa/enable", { code });
+        if (!data.success) {
+          toast.error(data.message || t("auth.twoFactorEnableFailed"));
+          return false;
+        }
+        mergeAuthUser(data.user);
+        toast.success(data.message || t("auth.twoFactorEnabled"));
+        return true;
+      } catch (error) {
+        toast.error(getErrorMessage(error, t("auth.twoFactorEnableFailed")));
+        return false;
+      }
+    },
+    [mergeAuthUser, t]
+  );
+
+  const disableTwoFactor = useCallback(
+    async ({ code }) => {
+      try {
+        const { data } = await axios.post("/api/auth/2fa/disable", { code });
+        if (!data.success) {
+          toast.error(data.message || t("auth.twoFactorDisableFailed"));
+          return false;
+        }
+        mergeAuthUser(data.user);
+        toast.success(data.message || t("auth.twoFactorDisabled"));
+        return true;
+      } catch (error) {
+        toast.error(getErrorMessage(error, t("auth.twoFactorDisableFailed")));
+        return false;
+      }
+    },
+    [mergeAuthUser, t]
+  );
 
   //logout function to handle user logout and socket disconnection
   const logout = async () => {
@@ -498,8 +617,12 @@ export const AuthProvider = ({ children }) => {
     playSendCue,
     playReceiveCue,
     login,
+    verifyTwoFactorLogin,
     logout,
     updateProfile,
+    beginTwoFactorSetup,
+    enableTwoFactor,
+    disableTwoFactor,
     fetchBlockedUsers,
     blockUser,
     unblockUser,

@@ -15,12 +15,34 @@ const LoginPage = () => {
   const [isDataSubmitted, setIsDataSubmitted] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
   const [agreed, setAgreed] = useState(false);
+  const [requiresTwoFactor, setRequiresTwoFactor] = useState(false);
+  const [twoFactorCode, setTwoFactorCode] = useState("");
+  const [twoFactorToken, setTwoFactorToken] = useState("");
   const [isSubmitting, setIsSubmitting] = useState(false);
-  const { login } = useContext(AuthContext);
+  const { login, verifyTwoFactorLogin } = useContext(AuthContext);
   const { isRtl, locale, setLocale, t } = useLocale();
+
+  const resetTwoFactorStep = () => {
+    setRequiresTwoFactor(false);
+    setTwoFactorCode("");
+    setTwoFactorToken("");
+  };
 
   const onSubmitHandler = async (event) => {
     event.preventDefault();
+
+    if (currState === LOGIN_MODE && requiresTwoFactor) {
+      setIsSubmitting(true);
+      const verified = await verifyTwoFactorLogin({
+        twoFactorToken,
+        code: twoFactorCode,
+      });
+      setIsSubmitting(false);
+      if (verified) {
+        resetTwoFactorStep();
+      }
+      return;
+    }
 
     if (currState === SIGNUP_MODE && !isDataSubmitted) {
       setIsDataSubmitted(true);
@@ -28,15 +50,22 @@ const LoginPage = () => {
     }
 
     setIsSubmitting(true);
-    const succeeded = await login(
+    const result = await login(
       currState === SIGNUP_MODE ? SIGNUP_MODE : LOGIN_MODE,
       { fullName, email, password, bio }
     );
     setIsSubmitting(false);
 
+    if (result?.requiresTwoFactor && result?.twoFactorToken) {
+      setRequiresTwoFactor(true);
+      setTwoFactorToken(result.twoFactorToken);
+      setTwoFactorCode("");
+      return;
+    }
+
     // If signup failed (e.g. email already in use), return to the first step so
     // the user can correct their email/password instead of being stuck on bio.
-    if (!succeeded && currState === SIGNUP_MODE) {
+    if (!result?.ok && currState === SIGNUP_MODE) {
       setIsDataSubmitted(false);
     }
   };
@@ -82,16 +111,28 @@ const LoginPage = () => {
           <div>
             <div className="flex items-center justify-between gap-3">
               <h2 className="font-semibold text-2xl text-white">
-                {currState === SIGNUP_MODE
+                {requiresTwoFactor
+                  ? t("loginPage.twoFactorTitle")
+                  : currState === SIGNUP_MODE
                   ? t("loginPage.signupTitle")
                   : t("loginPage.loginTitle")}
               </h2>
-              {isDataSubmitted && (
+              {(isDataSubmitted || requiresTwoFactor) && (
                 <button
                   type="button"
-                  onClick={() => setIsDataSubmitted(false)}
+                  onClick={() => {
+                    if (requiresTwoFactor) {
+                      resetTwoFactorStep();
+                      return;
+                    }
+                    setIsDataSubmitted(false);
+                  }}
                   className="h-9 w-9 rounded-xl bg-white/10 border border-white/15 flex items-center justify-center"
-                  aria-label={t("loginPage.backToAccountDetailsAria")}
+                  aria-label={
+                    requiresTwoFactor
+                      ? t("loginPage.backToLoginAria")
+                      : t("loginPage.backToAccountDetailsAria")
+                  }
                 >
                   <img
                     src={assets.arrow_icon}
@@ -102,7 +143,9 @@ const LoginPage = () => {
               )}
             </div>
             <p className="text-white/65 text-sm mt-2">
-              {currState === SIGNUP_MODE
+              {requiresTwoFactor
+                ? t("loginPage.twoFactorIntro", { email })
+                : currState === SIGNUP_MODE
                 ? t("loginPage.signupIntro")
                 : t("loginPage.loginIntro")}
             </p>
@@ -140,7 +183,7 @@ const LoginPage = () => {
               </div>
             )}
 
-            {!isDataSubmitted && (
+            {!requiresTwoFactor && !isDataSubmitted && (
               <>
                 <div className="relative">
                   <label htmlFor="auth-email" className="sr-only">
@@ -216,6 +259,31 @@ const LoginPage = () => {
               </>
             )}
 
+            {currState === LOGIN_MODE && requiresTwoFactor && (
+              <div className="space-y-2">
+                <label htmlFor="login-two-factor-code" className="sr-only">
+                  {t("loginPage.twoFactorCode")}
+                </label>
+                <input
+                  id="login-two-factor-code"
+                  onChange={(e) =>
+                    setTwoFactorCode(e.target.value.replace(/[^\d\s-]/g, ""))
+                  }
+                  value={twoFactorCode}
+                  type="text"
+                  inputMode="numeric"
+                  autoComplete="one-time-code"
+                  maxLength={8}
+                  placeholder={t("loginPage.twoFactorCodePlaceholder")}
+                  className="w-full py-3 px-3 rounded-xl bg-white/8 border border-white/15 text-sm text-white placeholder:text-white/45 tracking-[0.28em] text-center"
+                  required
+                />
+                <p className="text-xs text-white/55">
+                  {t("loginPage.twoFactorHint")}
+                </p>
+              </div>
+            )}
+
             {currState === SIGNUP_MODE && isDataSubmitted && (
               <div>
                 <label htmlFor="signup-bio" className="sr-only">
@@ -258,7 +326,9 @@ const LoginPage = () => {
           >
             {isSubmitting
               ? t("loginPage.pleaseWait")
-              : currState === SIGNUP_MODE
+              : requiresTwoFactor
+                ? t("loginPage.verifyCode")
+                : currState === SIGNUP_MODE
                 ? isDataSubmitted
                   ? t("loginPage.completeSignup")
                   : t("loginPage.continue")
@@ -274,10 +344,22 @@ const LoginPage = () => {
                   onClick={() => {
                     setCurrState(LOGIN_MODE);
                     setIsDataSubmitted(false);
+                    resetTwoFactorStep();
                   }}
                   className="font-medium text-brand-200 hover:text-brand-100 cursor-pointer"
                 >
                   {t("loginPage.loginHere")}
+                </button>
+              </p>
+            ) : requiresTwoFactor ? (
+              <p>
+                {t("loginPage.codeNotForYou")}{" "}
+                <button
+                  type="button"
+                  onClick={resetTwoFactorStep}
+                  className="font-medium text-brand-200 hover:text-brand-100 cursor-pointer"
+                >
+                  {t("loginPage.useAnotherAccount")}
                 </button>
               </p>
             ) : (
@@ -285,7 +367,10 @@ const LoginPage = () => {
                 {t("loginPage.newToQuickChat")}{" "}
                 <button
                   type="button"
-                  onClick={() => setCurrState(SIGNUP_MODE)}
+                  onClick={() => {
+                    setCurrState(SIGNUP_MODE);
+                    resetTwoFactorStep();
+                  }}
                   className="font-medium text-brand-200 hover:text-brand-100 cursor-pointer"
                 >
                   {t("loginPage.createAccount")}

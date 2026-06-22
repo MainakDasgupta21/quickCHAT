@@ -6,7 +6,13 @@ import { AuthContext } from "../../context/AuthContext";
 import { MAX_IMAGE_UPLOAD_BYTES } from "../lib/utils";
 
 const ProfilePage = () => {
-  const { authUser, updateProfile } = useContext(AuthContext);
+  const {
+    authUser,
+    updateProfile,
+    beginTwoFactorSetup,
+    enableTwoFactor,
+    disableTwoFactor,
+  } = useContext(AuthContext);
 
   const [selectedImg, setSelectedImg] = useState(null);
   const [name, setName] = useState(authUser?.fullName ?? "");
@@ -15,6 +21,10 @@ const ProfilePage = () => {
     authUser?.profilePic || assets.avatar_icon
   );
   const [isSaving, setIsSaving] = useState(false);
+  const [twoFactorSetup, setTwoFactorSetup] = useState(null);
+  const [twoFactorCode, setTwoFactorCode] = useState("");
+  const [isPreparingTwoFactor, setIsPreparingTwoFactor] = useState(false);
+  const [isUpdatingTwoFactor, setIsUpdatingTwoFactor] = useState(false);
   const navigate = useNavigate();
 
   useEffect(() => {
@@ -32,6 +42,12 @@ const ProfilePage = () => {
     setPreviewUrl(objectUrl);
     return () => URL.revokeObjectURL(objectUrl);
   }, [selectedImg, authUser?.profilePic]);
+
+  useEffect(() => {
+    if (authUser?.twoFactorEnabled) {
+      setTwoFactorSetup(null);
+    }
+  }, [authUser?.twoFactorEnabled]);
 
   const handleSelectImage = (event) => {
     const file = event.target.files?.[0];
@@ -75,6 +91,44 @@ const ProfilePage = () => {
       toast.error("Could not read that image. Please try another file.");
     };
     reader.readAsDataURL(selectedImg);
+  };
+
+  const handleStartTwoFactorSetup = async () => {
+    setIsPreparingTwoFactor(true);
+    const setupPayload = await beginTwoFactorSetup();
+    setIsPreparingTwoFactor(false);
+    if (setupPayload) {
+      setTwoFactorSetup(setupPayload);
+      setTwoFactorCode("");
+    }
+  };
+
+  const handleEnableTwoFactor = async () => {
+    if (!twoFactorCode.trim()) {
+      toast.error("Enter the 6-digit code from your authenticator app.");
+      return;
+    }
+    setIsUpdatingTwoFactor(true);
+    const didEnable = await enableTwoFactor({ code: twoFactorCode });
+    setIsUpdatingTwoFactor(false);
+    if (didEnable) {
+      setTwoFactorCode("");
+      setTwoFactorSetup(null);
+    }
+  };
+
+  const handleDisableTwoFactor = async () => {
+    if (!twoFactorCode.trim()) {
+      toast.error("Enter your current 6-digit authenticator code.");
+      return;
+    }
+    setIsUpdatingTwoFactor(true);
+    const didDisable = await disableTwoFactor({ code: twoFactorCode });
+    setIsUpdatingTwoFactor(false);
+    if (didDisable) {
+      setTwoFactorCode("");
+      setTwoFactorSetup(null);
+    }
   };
 
   return (
@@ -189,6 +243,111 @@ const ProfilePage = () => {
             <p className="mt-4 text-sm text-white/70">
               This image is shown in chats and your profile.
             </p>
+
+            <div className="mt-5 rounded-2xl border border-white/14 bg-white/6 p-4 text-left space-y-3">
+              <div>
+                <h3 className="text-sm font-semibold text-white">
+                  Two-factor authentication (TOTP)
+                </h3>
+                <p className="mt-1 text-xs text-white/65">
+                  Protect this account with a one-time code from Google
+                  Authenticator, Authy, or any TOTP app.
+                </p>
+              </div>
+
+              <button
+                type="button"
+                onClick={handleStartTwoFactorSetup}
+                disabled={isPreparingTwoFactor}
+                className="w-full rounded-xl border border-white/18 bg-white/8 px-3 py-2 text-xs text-white hover:bg-white/12 disabled:opacity-60 disabled:cursor-not-allowed"
+              >
+                {isPreparingTwoFactor
+                  ? "Preparing setup..."
+                  : authUser?.twoFactorEnabled
+                    ? "Rotate authenticator setup"
+                    : "Start 2FA setup"}
+              </button>
+
+              {twoFactorSetup && (
+                <div className="rounded-xl border border-white/14 bg-[#0c0f1f]/55 p-3 space-y-3">
+                  {twoFactorSetup.qrCodeDataUrl ? (
+                    <img
+                      src={twoFactorSetup.qrCodeDataUrl}
+                      alt="2FA setup QR code"
+                      className="mx-auto h-40 w-40 rounded-lg bg-white p-1"
+                    />
+                  ) : (
+                    <p className="text-xs text-white/70">
+                      QR preview unavailable. Use the manual key below.
+                    </p>
+                  )}
+                  <div>
+                    <p className="text-[11px] uppercase tracking-[0.12em] text-white/55">
+                      Manual setup key
+                    </p>
+                    <code className="mt-1 block rounded-lg bg-white/10 px-2 py-1 text-[11px] text-white break-all">
+                      {twoFactorSetup.manualEntryKey}
+                    </code>
+                  </div>
+                  <div className="space-y-2">
+                    <input
+                      type="text"
+                      value={twoFactorCode}
+                      onChange={(event) =>
+                        setTwoFactorCode(
+                          event.target.value.replace(/[^\d\s-]/g, "")
+                        )
+                      }
+                      inputMode="numeric"
+                      autoComplete="one-time-code"
+                      maxLength={8}
+                      className="w-full rounded-lg border border-white/15 bg-white/8 px-3 py-2 text-xs text-white placeholder:text-white/45 tracking-[0.22em]"
+                      placeholder="Enter 6-digit code"
+                    />
+                    <button
+                      type="button"
+                      onClick={handleEnableTwoFactor}
+                      disabled={isUpdatingTwoFactor}
+                      className="w-full rounded-lg btn-gradient py-2 text-xs font-medium disabled:opacity-60 disabled:cursor-not-allowed"
+                    >
+                      {isUpdatingTwoFactor
+                        ? "Verifying..."
+                        : authUser?.twoFactorEnabled
+                          ? "Confirm key rotation"
+                          : "Enable 2FA"}
+                    </button>
+                  </div>
+                </div>
+              )}
+
+              {authUser?.twoFactorEnabled && !twoFactorSetup && (
+                <div className="space-y-2">
+                  <p className="text-xs text-emerald-300">
+                    Two-factor authentication is currently enabled.
+                  </p>
+                  <input
+                    type="text"
+                    value={twoFactorCode}
+                    onChange={(event) =>
+                      setTwoFactorCode(event.target.value.replace(/[^\d\s-]/g, ""))
+                    }
+                    inputMode="numeric"
+                    autoComplete="one-time-code"
+                    maxLength={8}
+                    className="w-full rounded-lg border border-white/15 bg-white/8 px-3 py-2 text-xs text-white placeholder:text-white/45 tracking-[0.22em]"
+                    placeholder="Enter code to disable"
+                  />
+                  <button
+                    type="button"
+                    onClick={handleDisableTwoFactor}
+                    disabled={isUpdatingTwoFactor}
+                    className="w-full rounded-lg border border-rose-300/35 bg-rose-500/10 py-2 text-xs font-medium text-rose-200 hover:bg-rose-500/20 disabled:opacity-60 disabled:cursor-not-allowed"
+                  >
+                    {isUpdatingTwoFactor ? "Disabling..." : "Disable 2FA"}
+                  </button>
+                </div>
+              )}
+            </div>
           </div>
         </form>
       </div>

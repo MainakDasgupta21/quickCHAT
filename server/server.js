@@ -35,8 +35,23 @@ const ALLOWED_CLIENT_ORIGINS = [
         ...new Set([...DEFAULT_CLIENT_ORIGINS, ...configuredClientOrigins]),
 ];
 
+// Vercel assigns a new *.vercel.app domain to every production and preview
+// deploy, so we allow that family of origins instead of pinning a single URL.
+const isAllowedVercelOrigin = (origin) => {
+        try {
+                const { protocol, hostname } = new URL(origin);
+                return protocol === "https:" && hostname.endsWith(".vercel.app");
+        } catch {
+                return false;
+        }
+};
+
 const corsOriginHandler = (origin, callback) => {
-        if (!origin || ALLOWED_CLIENT_ORIGINS.includes(origin)) {
+        if (
+                !origin ||
+                ALLOWED_CLIENT_ORIGINS.includes(origin) ||
+                isAllowedVercelOrigin(origin)
+        ) {
                 callback(null, true);
                 return;
         }

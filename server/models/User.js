@@ -30,6 +30,10 @@ const userSchema = new mongoose.Schema({
                 ],
                 default: [],
         },
+        twoFactorEnabled: { type: Boolean, default: false },
+        twoFactorSecret: { type: String, default: "", select: false },
+        twoFactorTempSecret: { type: String, default: "", select: false },
+        twoFactorEnabledAt: { type: Date, default: null },
         pushSubscriptions: { type: [pushSubscriptionSchema], default: [], select: false },
 }, {timestamps: true})
 

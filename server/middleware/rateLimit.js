@@ -20,6 +20,12 @@ export const authRateLimiter = createJsonRateLimiter({
         message: "Too many authentication attempts. Please try again later.",
 });
 
+export const twoFactorActionRateLimiter = createJsonRateLimiter({
+        windowMs: 15 * 60 * 1000,
+        max: Number(process.env.TWO_FACTOR_RATE_LIMIT_MAX || 30),
+        message: "Too many two-factor requests. Please try again later.",
+});
+
 export const messageSendRateLimiter = createJsonRateLimiter({
         windowMs: 60 * 1000,
         max: Number(process.env.MESSAGE_SEND_RATE_LIMIT_MAX || 45),
