@@ -104,6 +104,39 @@ const HomePage = () => {
     }
   }, [keyboardUserIndex, navigationUsers, setSelectedUser]);
 
+  // Stable, identity-guarded callbacks for Sidebar. Passing inline arrows here
+  // previously re-created these on every HomePage render; because Sidebar runs
+  // effects that depend on them (and `onFilteredUsersChange` sets a brand-new
+  // array that never bails out of React's state update), this drove a runaway
+  // render loop. useCallback keeps the effect dependencies stable, and the
+  // shallow-equality guard prevents needless re-renders when the id list is
+  // unchanged (e.g. a presence refetch with identical membership).
+  const handleFilteredUsersChange = useCallback((ids) => {
+    setKeyboardUserIds((previousIds) => {
+      if (
+        previousIds.length === ids.length &&
+        previousIds.every((id, index) => id === ids[index])
+      ) {
+        return previousIds;
+      }
+      return ids;
+    });
+  }, []);
+
+  const handleSidebarMenuOpenChange = useCallback((open) => {
+    setIsSidebarMenuOpen(open);
+  }, []);
+
+  const handleKeyboardUserHover = useCallback(
+    (userId) => {
+      const foundIndex = navigationUsers.findIndex(
+        (user) => user._id === userId
+      );
+      if (foundIndex >= 0) setKeyboardUserIndex(foundIndex);
+    },
+    [navigationUsers]
+  );
+
   const handleSendShortcut = useCallback(() => {
     setSendShortcutSignal((prev) => prev + 1);
   }, []);
@@ -171,14 +204,9 @@ const HomePage = () => {
           focusSearchSignal={focusSearchSignal}
           escapeSignal={escapeSignal}
           keyboardUserId={navigationUsers[keyboardUserIndex]?._id}
-          onFilteredUsersChange={(ids) => setKeyboardUserIds(ids)}
-          onMenuOpenChange={(open) => setIsSidebarMenuOpen(open)}
-          onKeyboardUserHover={(userId) => {
-            const foundIndex = navigationUsers.findIndex(
-              (user) => user._id === userId
-            );
-            if (foundIndex >= 0) setKeyboardUserIndex(foundIndex);
-          }}
+          onFilteredUsersChange={handleFilteredUsersChange}
+          onMenuOpenChange={handleSidebarMenuOpenChange}
+          onKeyboardUserHover={handleKeyboardUserHover}
         />
         <ChatContainer
           sendShortcutSignal={sendShortcutSignal}

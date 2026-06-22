@@ -1,4 +1,4 @@
-import React, { useContext, useEffect, useState } from "react";
+import React, { useContext, useMemo } from "react";
 import assets from "../assets/assets";
 import { ChatContext } from "../../context/ChatContext";
 import { AuthContext } from "../../context/AuthContext";
@@ -9,11 +9,17 @@ const RightSidebar = ({
 }) => {
   const { selectedUser, messages } = useContext(ChatContext);
   const { logout, onlineUsers } = useContext(AuthContext);
-  const [msgImages, setMsgImages] = useState([]);
 
-  useEffect(() => {
-    setMsgImages(messages.filter((msg) => msg.image).map((msg) => msg.image));
-  }, [messages]);
+  // Derive shared media directly during render instead of mirroring it into
+  // state via an effect — the previous approach triggered an extra render on
+  // every message update and could briefly show stale media.
+  const msgImages = useMemo(
+    () =>
+      messages
+        .filter((message) => message.image && !message.isDeleted)
+        .map((message) => message.image),
+    [messages]
+  );
 
   if (!selectedUser) return null;
 
@@ -25,6 +31,7 @@ const RightSidebar = ({
             <img
               src={selectedUser?.profilePic || assets.avatar_icon}
               alt={`${selectedUser.fullName} profile`}
+              decoding="async"
               className="h-full w-full rounded-full object-cover border border-white/15"
             />
           </div>
@@ -61,13 +68,15 @@ const RightSidebar = ({
               <button
                 type="button"
                 key={index}
-                onClick={() => window.open(url, "_blank")}
+                onClick={() => window.open(url, "_blank", "noopener,noreferrer")}
                 className="group aspect-square rounded-2xl overflow-hidden border border-white/14 bg-white/6"
                 aria-label={`Open shared image ${index + 1}`}
               >
                 <img
                   src={url}
                   alt={`Shared media ${index + 1}`}
+                  loading="lazy"
+                  decoding="async"
                   className="h-full w-full object-cover transition-transform duration-300 group-hover:scale-110"
                 />
               </button>
@@ -131,4 +140,4 @@ const RightSidebar = ({
   );
 };
 
-export default RightSidebar;
+export default React.memo(RightSidebar);

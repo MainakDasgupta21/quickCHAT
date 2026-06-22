@@ -1,6 +1,7 @@
 import React, {
   Suspense,
   lazy,
+  useCallback,
   useContext,
   useEffect,
   useMemo,
@@ -8,18 +9,11 @@ import React, {
   useState,
 } from "react";
 import assets from "../assets/assets";
-import {
-  MAX_IMAGE_UPLOAD_BYTES,
-  formatDateDividerLabel,
-  formatFileSize,
-  formatMessageTime,
-} from "../lib/utils";
+import { MAX_IMAGE_UPLOAD_BYTES, formatFileSize } from "../lib/utils";
 import { ChatContext } from "../../context/ChatContext";
 import { AuthContext } from "../../context/AuthContext";
 import toast from "react-hot-toast";
-import ReactionBar from "./ReactionBar";
-import MessageMenu from "./MessageMenu";
-import AudioMessage from "./AudioMessage";
+import MessageList from "./MessageList";
 import RightSidebar from "./RightSidebar";
 
 const EmojiPicker = lazy(() => import("emoji-picker-react"));
@@ -77,27 +71,6 @@ const ChatContainer = ({
   const [openMessageMenuId, setOpenMessageMenuId] = useState(null);
   const [openReactionPickerId, setOpenReactionPickerId] = useState(null);
   const [isMobileDetailsOpen, setIsMobileDetailsOpen] = useState(false);
-
-  const highlightText = (text) => {
-    if (!searchQuery.trim()) return text;
-    const escapedQuery = searchQuery.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
-    const splitMatcher = new RegExp(`(${escapedQuery})`, "gi");
-    const exactMatcher = new RegExp(`^${escapedQuery}$`, "i");
-    return String(text)
-      .split(splitMatcher)
-      .map((chunk, index) =>
-        exactMatcher.test(chunk) ? (
-          <mark
-            key={`${chunk}-${index}`}
-            className="bg-brand-200/35 text-white px-0.5 rounded-[4px]"
-          >
-            {chunk}
-          </mark>
-        ) : (
-          <React.Fragment key={`${chunk}-${index}`}>{chunk}</React.Fragment>
-        )
-      );
-  };
 
   const processFileInput = async (file, mode = "auto") => {
     if (!file) return;
@@ -417,34 +390,50 @@ const ChatContainer = ({
     activeElement?.scrollIntoView({ behavior: "smooth", block: "center" });
   }, [activeSearchMatchIndex, searchMatchIds]);
 
-  const groupedReactionsForMessage = (message) => {
-    const grouped = new Map();
-    (message.reactions || []).forEach((reaction) => {
-      if (!grouped.has(reaction.emoji)) {
-        grouped.set(reaction.emoji, { emoji: reaction.emoji, count: 0, mine: false });
-      }
-      const entry = grouped.get(reaction.emoji);
-      entry.count += 1;
-      if (reaction.userId?.toString() === authUser?._id?.toString()) {
-        entry.mine = true;
-      }
-    });
-    return Array.from(grouped.values());
-  };
+  // Stable handlers passed to the memoized MessageList. Keeping their identity
+  // constant lets MessageRow's React.memo skip re-rendering untouched messages.
+  const handleReact = useCallback(
+    (messageId, emoji) => {
+      reactToMessage(messageId, emoji);
+      setOpenReactionPickerId(null);
+      setOpenMessageMenuId(null);
+    },
+    [reactToMessage]
+  );
 
-  const getReplySnippet = (message) => {
-    if (!message.replyTo) return null;
-    const replyMessage = message.replyTo;
+  const handleReply = useCallback(
+    (message) => {
+      setReplyTo(message);
+      setEditingMessageId(null);
+    },
+    [setReplyTo]
+  );
 
-    if (replyMessage.isDeleted) {
-      return "Deleted message";
-    }
-    if (replyMessage.text) return replyMessage.text;
-    if (replyMessage.image) return "Photo";
-    if (replyMessage.audio?.url) return "Voice note";
-    if (replyMessage.file?.name) return `File: ${replyMessage.file.name}`;
-    return "Attachment";
-  };
+  const handleStartEdit = useCallback(
+    (message) => {
+      setEditingMessageId(message._id);
+      setInput(message.text || "");
+      setReplyTo(null);
+    },
+    [setReplyTo]
+  );
+
+  const handleDelete = useCallback(
+    (messageId) => {
+      deleteMessage(messageId);
+    },
+    [deleteMessage]
+  );
+
+  const handleOpenMenuChange = useCallback((messageId, open) => {
+    setOpenMessageMenuId(open ? messageId : null);
+    if (open) setOpenReactionPickerId(null);
+  }, []);
+
+  const handleOpenReactionChange = useCallback((messageId, open) => {
+    setOpenReactionPickerId(open ? messageId : null);
+    if (open) setOpenMessageMenuId(null);
+  }, []);
 
   const activeSearchMatchId = searchMatchIds[activeSearchMatchIndex];
   const hasInteractiveOverlayOpen =
@@ -467,6 +456,9 @@ const ChatContainer = ({
             <img
               src={selectedUser.profilePic || assets.avatar_icon}
               alt={`${selectedUser.fullName} profile`}
+              decoding="async"
+              width="40"
+              height="40"
               className="w-10 h-10 rounded-full object-cover border border-white/20"
             />
             {onlineUsers.includes(selectedUser._id) && (
@@ -604,260 +596,26 @@ const ChatContainer = ({
           </div>
         )}
 
-        {!messagesLoading &&
-          messages.map((msg, index) => {
-            const isOwnMessage = msg.senderId === authUser._id;
-            const previousMessage = messages[index - 1];
-            const showDayDivider =
-              !previousMessage ||
-              new Date(previousMessage.createdAt).toDateString() !==
-                new Date(msg.createdAt).toDateString();
-            const isSearchMatch = searchMatchIds.includes(msg._id);
-            const reactionGroups = groupedReactionsForMessage(msg);
-            const replySnippet = getReplySnippet(msg);
-
-            return (
-              <React.Fragment key={msg._id || index}>
-                {showDayDivider && (
-                  <div className="flex items-center gap-2 my-4">
-                    <div className="h-px flex-1 bg-white/12" />
-                    <span className="text-[11px] text-white/50 uppercase tracking-wider">
-                      {formatDateDividerLabel(msg.createdAt)}
-                    </span>
-                    <div className="h-px flex-1 bg-white/12" />
-                  </div>
-                )}
-
-                {firstUnreadIndex === index && (
-                  <div className="flex items-center gap-2 my-3">
-                    <div className="h-px flex-1 bg-brand-300/35" />
-                    <span className="text-[11px] text-brand-200">Unread messages</span>
-                    <div className="h-px flex-1 bg-brand-300/35" />
-                  </div>
-                )}
-
-                <div
-                  ref={(element) => {
-                    if (!msg._id) return;
-                    if (element) {
-                      messageElementRefs.current[msg._id] = element;
-                    } else {
-                      delete messageElementRefs.current[msg._id];
-                    }
-                  }}
-                  className={`message-item group flex mb-4 animate-message-in ${
-                    isOwnMessage ? "justify-end" : "justify-start"
-                  }`}
-                >
-                  <div
-                    className={`max-w-[78%] flex flex-col ${
-                      isOwnMessage ? "items-end" : "items-start"
-                    }`}
-                  >
-                    {!msg.isDeleted && replySnippet && (
-                      <button
-                        type="button"
-                        onClick={() => {
-                          if (msg.replyTo?._id) {
-                            messageElementRefs.current[msg.replyTo._id]?.scrollIntoView({
-                              behavior: "smooth",
-                              block: "center",
-                            });
-                          }
-                        }}
-                        className={`mb-1 text-left text-xs px-3 py-2 rounded-xl border ${
-                          isOwnMessage
-                            ? "bg-brand-700/40 border-brand-200/25 text-white/80"
-                            : "bg-white/8 border-white/16 text-white/75"
-                        }`}
-                      >
-                        <span className="block text-[10px] uppercase tracking-wide text-white/50">
-                          Reply
-                        </span>
-                        <span className="line-clamp-1">{replySnippet}</span>
-                      </button>
-                    )}
-
-                  {msg.image && (
-                    <button
-                      type="button"
-                      onClick={() => window.open(msg.image, "_blank")}
-                      className={`rounded-2xl overflow-hidden border ${
-                        isOwnMessage
-                          ? "border-brand-300/55"
-                          : "border-white/20 bg-white/4"
-                      }`}
-                    >
-                      <img
-                        src={msg.image}
-                        alt="message media"
-                        className="max-h-64 sm:max-h-72 object-cover"
-                      />
-                    </button>
-                  )}
-
-                  {msg.file?.url && !msg.isDeleted && (
-                    <a
-                      href={msg.file.url}
-                      target="_blank"
-                      rel="noreferrer"
-                      className={`mb-1 rounded-2xl border px-3 py-2.5 text-sm ${
-                        isOwnMessage
-                          ? "bg-brand-700/40 border-brand-200/25 text-white/90"
-                          : "bg-white/8 border-white/16 text-white/85"
-                      }`}
-                    >
-                      <p className="font-medium truncate max-w-56">
-                        {msg.file.name || "Attachment"}
-                      </p>
-                      <p className="text-xs text-white/60 mt-0.5">
-                        {formatFileSize(msg.file.size)} · Download
-                      </p>
-                    </a>
-                  )}
-
-                  {msg.audio?.url && !msg.isDeleted && (
-                    <div className="mb-1">
-                      <AudioMessage src={msg.audio.url} duration={msg.audio.duration} />
-                    </div>
-                  )}
-
-                  {msg.isDeleted ? (
-                    <div
-                      className={`relative px-4 py-2.5 text-sm italic ${
-                        isOwnMessage
-                          ? "text-white/70 rounded-[18px] rounded-br-sm bg-brand-700/35 border border-brand-200/20"
-                          : "text-white/65 rounded-[18px] rounded-bl-sm bg-white/6 border border-white/14"
-                      }`}
-                    >
-                      This message was deleted
-                    </div>
-                  ) : (
-                    msg.text && (
-                    <div
-                      className={`relative px-4 py-2.5 text-sm break-words leading-relaxed ${
-                        isOwnMessage
-                          ? "text-white rounded-[18px] rounded-br-sm bg-[var(--gradient-brand)] shadow-[0_10px_24px_rgba(86,61,218,0.34)]"
-                          : "text-white/92 rounded-[18px] rounded-bl-sm bg-white/8 border border-white/16 backdrop-blur-sm"
-                      } ${
-                        activeSearchMatchId === msg._id ? "ring-2 ring-brand-200/80 ring-offset-2 ring-offset-transparent" : ""
-                      }`}
-                    >
-                      {isSearchMatch ? highlightText(msg.text) : msg.text}
-                    </div>
-                    )
-                  )}
-
-                    {!msg.isDeleted && (
-                      <div
-                        className={`message-actions-row mt-1 ${
-                          openReactionPickerId === msg._id ||
-                          openMessageMenuId === msg._id
-                            ? "message-actions-row--open"
-                            : ""
-                        }`}
-                      >
-                        <div className="flex items-center gap-1.5">
-                          <ReactionBar
-                            onSelectEmoji={(emoji) => {
-                              reactToMessage(msg._id, emoji);
-                              setOpenReactionPickerId(null);
-                              setOpenMessageMenuId(null);
-                            }}
-                            isPickerOpen={openReactionPickerId === msg._id}
-                            onPickerOpenChange={(open) => {
-                              setOpenReactionPickerId(open ? msg._id : null);
-                              if (open) {
-                                setOpenMessageMenuId(null);
-                              }
-                            }}
-                            closeSignal={escapeSignal}
-                          />
-                          <MessageMenu
-                            canEdit={isOwnMessage}
-                            isOpen={openMessageMenuId === msg._id}
-                            onOpenChange={(open) => {
-                              setOpenMessageMenuId(open ? msg._id : null);
-                              if (open) {
-                                setOpenReactionPickerId(null);
-                              }
-                            }}
-                            closeSignal={escapeSignal}
-                            onReply={() => {
-                              setReplyTo(msg);
-                              setEditingMessageId(null);
-                            }}
-                            onEdit={() => {
-                              setEditingMessageId(msg._id);
-                              setInput(msg.text || "");
-                              setReplyTo(null);
-                            }}
-                            onDelete={() => {
-                              deleteMessage(msg._id);
-                            }}
-                          />
-                        </div>
-                      </div>
-                    )}
-
-                  {!!reactionGroups.length && (
-                    <div
-                      className={`mt-1 flex flex-wrap gap-1 ${
-                        isOwnMessage ? "justify-end" : "justify-start"
-                      }`}
-                    >
-                      {reactionGroups.map((reaction) => (
-                        <button
-                          type="button"
-                          key={`${msg._id}-${reaction.emoji}`}
-                          onClick={() => {
-                            reactToMessage(msg._id, reaction.emoji);
-                            setOpenReactionPickerId(null);
-                            setOpenMessageMenuId(null);
-                          }}
-                          className={`px-2 py-1 rounded-full text-xs border ${
-                            reaction.mine
-                              ? "bg-brand-500/35 border-brand-200/45 text-white"
-                              : "bg-white/8 border-white/20 text-white/80"
-                          }`}
-                          aria-pressed={reaction.mine}
-                          aria-label={`${reaction.emoji} reaction, ${reaction.count} ${
-                            reaction.count === 1 ? "person" : "people"
-                          }`}
-                        >
-                          {reaction.emoji} {reaction.count}
-                        </button>
-                      ))}
-                    </div>
-                  )}
-
-                  <div
-                    className={`mt-1.5 px-1 flex items-center gap-1 text-[11px] text-white/55 ${
-                      isOwnMessage ? "justify-end" : "justify-start"
-                    }`}
-                  >
-                    <span className="text-white/45">
-                      {formatMessageTime(msg.createdAt)}
-                    </span>
-                    {isOwnMessage && (
-                      <span
-                        className={`font-semibold tracking-tight ${
-                          msg.seen ? "text-brand-200" : "text-white/55"
-                        }`}
-                        title={msg.seen ? "Seen" : "Delivered"}
-                      >
-                        {msg.seen ? "✓✓" : "✓"}
-                      </span>
-                    )}
-                    {msg.editedAt && !msg.isDeleted && (
-                      <span className="text-white/40">(edited)</span>
-                    )}
-                  </div>
-                </div>
-                </div>
-              </React.Fragment>
-            );
-          })}
+        {!messagesLoading && (
+          <MessageList
+            messages={messages}
+            authUserId={authUser._id}
+            firstUnreadIndex={firstUnreadIndex}
+            searchMatchIds={searchMatchIds}
+            activeSearchMatchId={activeSearchMatchId}
+            searchQuery={searchQuery}
+            openMessageMenuId={openMessageMenuId}
+            openReactionPickerId={openReactionPickerId}
+            closeSignal={escapeSignal}
+            messageElementRefs={messageElementRefs}
+            onReact={handleReact}
+            onReply={handleReply}
+            onStartEdit={handleStartEdit}
+            onDelete={handleDelete}
+            onOpenMenuChange={handleOpenMenuChange}
+            onOpenReactionChange={handleOpenReactionChange}
+          />
+        )}
 
         {!messagesLoading && isSelectedUserTyping && (
           <div className="flex justify-start mb-4 animate-fade-in">

@@ -60,6 +60,11 @@ const messageSchema = new mongoose.Schema(
 );
 
 messageSchema.index({ text: "text" });
+// Conversation history + last-message lookups in both directions.
+messageSchema.index({ senderId: 1, receiverId: 1, createdAt: -1 });
+messageSchema.index({ receiverId: 1, senderId: 1, createdAt: -1 });
+// Unseen-count aggregation for the sidebar.
+messageSchema.index({ receiverId: 1, seen: 1 });
 
 
 const Message = mongoose.model("Message", messageSchema);

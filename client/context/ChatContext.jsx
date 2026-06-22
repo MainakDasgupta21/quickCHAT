@@ -49,7 +49,7 @@ export const ChatProvider = ({ children }) => {
         setUnseenMessages(data.unseenMessages);
       }
     } catch (error) {
-      toast.error(error.message);
+      toast.error(getErrorMessage(error));
     } finally {
       hasLoadedUsersRef.current = true;
       setUsersLoading(false);

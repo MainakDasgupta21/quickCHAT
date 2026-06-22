@@ -332,6 +332,10 @@ const Sidebar = ({
                   <img
                     src={user?.profilePic || assets.avatar_icon}
                     alt={`${user.fullName} profile`}
+                    loading="lazy"
+                    decoding="async"
+                    width="44"
+                    height="44"
                     className="w-11 h-11 rounded-full object-cover border border-white/20"
                   />
                   {isOnline && (

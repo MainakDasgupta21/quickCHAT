@@ -3,6 +3,15 @@ import User from "../models/User.js";
 import bcrypt from 'bcryptjs'
 import cloudinary from "../lib/cloudinary.js"
 
+// Never leak the bcrypt password hash back to the client. Signup/login used to
+// respond with the raw Mongoose document, which included `password`.
+const sanitizeUser = (user) => {
+        if (!user) return user;
+        const plain = typeof user.toObject === "function" ? user.toObject() : { ...user };
+        delete plain.password;
+        return plain;
+};
+
 
 
 //sign up new user
@@ -29,7 +38,7 @@ export const Signup = async (req, res) => {
 
                 const token = generateToken(newUser._id)
 
-                res.json({ success: true, userData: newUser, token, message: "Account created successfully" })
+                res.json({ success: true, userData: sanitizeUser(newUser), token, message: "Account created successfully" })
 
         } catch (error) {
                 console.log(error.message);
@@ -52,7 +61,7 @@ export const login = async (req, res) => {
                 }
 
                 const token = generateToken(userData._id)
-                res.json({ success: true, userData, token, message: "Login successful" })
+                res.json({ success: true, userData: sanitizeUser(userData), token, message: "Login successful" })
         } catch (error) {
                 console.log(error.message)
                 res.json({ success: false, message: error.message })

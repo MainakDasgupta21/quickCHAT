@@ -45,36 +45,73 @@ const uploadBase64 = async (base64Data, folder, resourceType = "image") => {
 export const getUserForSidebar = async (req, res) => {
   try {
     const userId = req.user._id;
-    const filteredUsers = await User.find({ _id: { $ne: userId } }).select(
-      "-password"
+    const userObjectId = new mongoose.Types.ObjectId(userId);
+
+    // 1) The contact list (plain objects — we only spread them).
+    const filteredUsers = await User.find({ _id: { $ne: userId } })
+      .select("-password")
+      .lean();
+
+    // 2) Last message per conversation in a single aggregation, instead of one
+    //    findOne() per user (which was an N+1 query against the messages
+    //    collection and the main sidebar bottleneck).
+    const lastMessages = await Message.aggregate([
+      {
+        $match: {
+          $or: [{ senderId: userObjectId }, { receiverId: userObjectId }],
+        },
+      },
+      { $sort: { createdAt: -1 } },
+      {
+        $group: {
+          _id: {
+            $cond: [
+              { $eq: ["$senderId", userObjectId] },
+              "$receiverId",
+              "$senderId",
+            ],
+          },
+          text: { $first: "$text" },
+          image: { $first: "$image" },
+          file: { $first: "$file" },
+          audio: { $first: "$audio" },
+          isDeleted: { $first: "$isDeleted" },
+          createdAt: { $first: "$createdAt" },
+        },
+      },
+    ]);
+
+    // 3) Unseen counts grouped by sender in one aggregation, instead of one
+    //    countDocuments() per user.
+    const unseenCounts = await Message.aggregate([
+      { $match: { receiverId: userObjectId, seen: false } },
+      { $group: { _id: "$senderId", count: { $sum: 1 } } },
+    ]);
+
+    const lastMessageByUser = new Map(
+      lastMessages.map((message) => [message._id.toString(), message])
     );
 
     const unseenMessages = {};
-    const usersWithMeta = await Promise.all(
-      filteredUsers.map(async (user) => {
-        const unseenCount = await Message.countDocuments({
-          senderId: user._id,
-          receiverId: userId,
-          seen: false,
-        });
+    unseenCounts.forEach(({ _id, count }) => {
+      unseenMessages[_id.toString()] = count;
+    });
 
-        if (unseenCount > 0) {
-          unseenMessages[user._id] = unseenCount;
-        }
+    const usersWithMeta = filteredUsers.map((user) => {
+      const latestMessage = lastMessageByUser.get(user._id.toString());
+      return {
+        ...user,
+        lastMessagePreview: getMessagePreview(latestMessage),
+        lastMessageAt: latestMessage?.createdAt || null,
+      };
+    });
 
-        const latestMessage = await Message.findOne(
-          getConversationFilter(userId, user._id)
-        )
-          .sort({ createdAt: -1 })
-          .select("text image file audio isDeleted createdAt");
-
-        return {
-          ...user.toObject(),
-          lastMessagePreview: getMessagePreview(latestMessage),
-          lastMessageAt: latestMessage?.createdAt || null,
-        };
-      })
-    );
+    // Surface the most recently active conversations first (standard chat UX).
+    usersWithMeta.sort((a, b) => {
+      const aTime = a.lastMessageAt ? new Date(a.lastMessageAt).getTime() : 0;
+      const bTime = b.lastMessageAt ? new Date(b.lastMessageAt).getTime() : 0;
+      return bTime - aTime;
+    });
 
     res.json({ success: true, users: usersWithMeta, unseenMessages });
   } catch (error) {
