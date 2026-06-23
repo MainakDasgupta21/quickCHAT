@@ -87,6 +87,10 @@
     "newGroup": "New Group",
     "startChat": "Start chat",
     "chatOpened": "Chat opened",
+    "contacts": "People",
+    "startChatWith": "Start chat with {{name}}",
+    "noContactsMatchSearch": "No people match your search.",
+    "noContactsAvailable": "No people available right now.",
     "groupCreated": "Group created",
     "starredMessages": "Starred Messages",
     "archiveChat": "Archive chat",
@@ -103,7 +107,7 @@
     "showActiveChats": "Show active chats",
     "showArchivedChats": "Show archived",
     "noConversationsFound": "No conversations found",
-    "tryDifferentSearch": "Try a different search or create a group.",
+    "tryDifferentSearch": "Try a different search, start a personal chat from People, or create a group.",
     "ariaUnreadSuffix": ", {{count}} unread"
   },
   "rightSidebar": {

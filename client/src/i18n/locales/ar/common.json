@@ -87,6 +87,10 @@
     "newGroup": "مجموعة جديدة",
     "startChat": "بدء الدردشة",
     "chatOpened": "تم فتح الدردشة",
+    "contacts": "الأشخاص",
+    "startChatWith": "بدء الدردشة مع {{name}}",
+    "noContactsMatchSearch": "لا يوجد أشخاص مطابقون لبحثك.",
+    "noContactsAvailable": "لا يوجد أشخاص متاحون الآن.",
     "groupCreated": "تم إنشاء المجموعة",
     "starredMessages": "الرسائل المميزة",
     "archiveChat": "أرشفة الدردشة",
@@ -103,7 +107,7 @@
     "showActiveChats": "إظهار الدردشات النشطة",
     "showArchivedChats": "إظهار المؤرشفة",
     "noConversationsFound": "لم يتم العثور على محادثات",
-    "tryDifferentSearch": "جرّب بحثًا آخر أو أنشئ مجموعة.",
+    "tryDifferentSearch": "جرّب بحثًا آخر، أو ابدأ دردشة شخصية من قسم الأشخاص، أو أنشئ مجموعة.",
     "ariaUnreadSuffix": "، {{count}} غير مقروءة"
   },
   "rightSidebar": {

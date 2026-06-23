@@ -106,6 +106,19 @@ const toStarredByIds = (starredByValue) =>
         .filter(Boolean)
     : [];
 
+const isTouchPointerEnvironment = () =>
+  typeof window !== "undefined" &&
+  typeof window.matchMedia === "function" &&
+  window.matchMedia("(hover: none), (pointer: coarse)").matches;
+
+const isInteractiveTouchTarget = (target) =>
+  target instanceof Element &&
+  Boolean(
+    target.closest(
+      'button, a, input, textarea, select, label, summary, [role="button"], [role="menuitem"], audio, video'
+    )
+  );
+
 // Each row is memoized so that an update to a single message (a reaction, an
 // edit, a seen receipt) only re-renders that row — and so composer typing or
 // presence updates in the parent never re-render the conversation at all.
@@ -119,6 +132,7 @@ const MessageRow = React.memo(function MessageRow({
   isActiveSearchMatch,
   isMenuOpen,
   isReactionOpen,
+  isTouchActionsOpen,
   highlightQuery,
   closeSignal,
   messageElementRefs,
@@ -131,6 +145,7 @@ const MessageRow = React.memo(function MessageRow({
   onJumpToMessage,
   onOpenMenuChange,
   onOpenReactionChange,
+  onToggleTouchActions,
   onOpenImage,
   onOpenThread,
   mentionNameMap,
@@ -244,6 +259,12 @@ const MessageRow = React.memo(function MessageRow({
                 ? "items-end message-content--own"
                 : "items-start message-content--peer"
             }`}
+            onClick={(event) => {
+              if (!isTouchPointerEnvironment()) return;
+              if (isInteractiveTouchTarget(event.target)) return;
+              if (!hasMenuActions || message.isDeleted || isPendingLocalMessage) return;
+              onToggleTouchActions?.(message._id || message.clientId || "");
+            }}
           >
             {!message.isDeleted && replySnippet && (
               <button
@@ -387,7 +408,9 @@ const MessageRow = React.memo(function MessageRow({
             {!message.isDeleted && !isPendingLocalMessage && hasMenuActions && (
               <div
                 className={`message-actions-row ${
-                  isReactionOpen || isMenuOpen ? "message-actions-row--open" : ""
+                  isTouchActionsOpen || isReactionOpen || isMenuOpen
+                    ? "message-actions-row--open"
+                    : ""
                 }`}
               >
                 <div className="flex items-center gap-1.5">
@@ -587,6 +610,7 @@ const MessageList = React.memo(function MessageList({
   searchQuery,
   openMessageMenuId,
   openReactionPickerId,
+  openTouchActionsMessageId,
   closeSignal,
   messageElementRefs,
   onReact,
@@ -601,6 +625,7 @@ const MessageList = React.memo(function MessageList({
   onJumpToMessage,
   onOpenMenuChange,
   onOpenReactionChange,
+  onToggleTouchActions = () => {},
   onOpenLightbox = () => {},
   onOpenThread = () => {},
   virtuosoRef,
@@ -703,6 +728,10 @@ const MessageList = React.memo(function MessageList({
             isActiveSearchMatch={String(activeSearchMatchId || "") === messageId}
             isMenuOpen={openMessageMenuId === message._id}
             isReactionOpen={openReactionPickerId === message._id}
+            isTouchActionsOpen={
+              String(openTouchActionsMessageId || "") ===
+              String(message._id || message.clientId || "")
+            }
             highlightQuery={highlightQuery}
             closeSignal={closeSignal}
             messageElementRefs={messageElementRefs}
@@ -718,6 +747,7 @@ const MessageList = React.memo(function MessageList({
             onJumpToMessage={onJumpToMessage}
             onOpenMenuChange={onOpenMenuChange}
             onOpenReactionChange={onOpenReactionChange}
+            onToggleTouchActions={onToggleTouchActions}
             onOpenImage={handleOpenImage}
             onOpenThread={onOpenThread}
             mentionNameMap={mentionNameMap}

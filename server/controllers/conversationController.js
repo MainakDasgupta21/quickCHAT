@@ -465,6 +465,7 @@ export const createGroupConversation = async (req, res) => {
       type: "group",
       name: String(name || "").trim(),
       avatar: String(avatar || "").trim(),
+      directKey: undefined,
       createdBy: currentUserId,
       participants: createParticipantPayload(normalizedParticipantIds, currentUserId),
     });

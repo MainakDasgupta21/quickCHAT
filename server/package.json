@@ -5,7 +5,8 @@
   "main": "index.js",
   "scripts": {
     "server": "nodemon server.js",
-    "start": "node server.js"
+    "start": "node server.js",
+    "cleanup:group-direct-keys": "node scripts/cleanup-group-direct-keys.js"
   },
   "keywords": [],
   "author": "",

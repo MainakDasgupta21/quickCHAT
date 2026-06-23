@@ -1,4 +1,4 @@
-import React, { useContext, useEffect, useMemo, useRef, useState } from "react";
+import React, { useCallback, useContext, useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import toast from "react-hot-toast";
 import assets from "../assets/assets";
@@ -58,12 +58,15 @@ const Sidebar = ({
   const [isNewChatOpen, setIsNewChatOpen] = useState(false);
   const [isCreatingGroup, setIsCreatingGroup] = useState(false);
   const [isOpeningDirectChat, setIsOpeningDirectChat] = useState(false);
+  const [openingContactId, setOpeningContactId] = useState("");
+  const [isLoadingContacts, setIsLoadingContacts] = useState(false);
   const [showArchivedConversations, setShowArchivedConversations] = useState(false);
   const menuRef = useRef(null);
   const searchInputRef = useRef(null);
   const menuTriggerRef = useRef(null);
   const hasFocusedMenuRef = useRef(false);
   const hasFetchedConversationsRef = useRef(false);
+  const hasFetchedContactsRef = useRef(false);
   const knownUserIdsRef = useRef(new Set());
 
   const visibleConversations = useMemo(
@@ -83,6 +86,36 @@ const Sidebar = ({
       getConversationSearchText(conversation).toLowerCase().includes(lowered)
     );
   }, [input, visibleConversations]);
+
+  const normalizedAuthUserId = toNormalizedId(authUser?._id);
+  const filteredContacts = useMemo(() => {
+    const lowered = input.trim().toLowerCase();
+    return (Array.isArray(contacts) ? contacts : []).filter((contact) => {
+      const contactId = toNormalizedId(contact?._id);
+      if (!contactId || contactId === normalizedAuthUserId) return false;
+      if (!lowered) return true;
+      return (
+        String(contact?.fullName || "").toLowerCase().includes(lowered) ||
+        String(contact?.bio || "").toLowerCase().includes(lowered)
+      );
+    });
+  }, [contacts, input, normalizedAuthUserId]);
+
+  const directConversationByPeerId = useMemo(() => {
+    const directConversationMap = new Map();
+    conversations.forEach((conversation) => {
+      if (!isDirectConversation(conversation)) return;
+      const peerId = getConversationPeerId(conversation);
+      if (!peerId || directConversationMap.has(peerId)) return;
+      directConversationMap.set(peerId, conversation);
+    });
+    return directConversationMap;
+  }, [conversations]);
+
+  const activeDirectPeerId = useMemo(() => {
+    if (!isDirectConversation(selectedConversation)) return "";
+    return getConversationPeerId(selectedConversation);
+  }, [selectedConversation]);
 
   useEffect(() => {
     const knownUserIds = new Set();
@@ -111,6 +144,38 @@ const Sidebar = ({
       getConversations();
     }
   }, [authUser?._id, getConversations, onlineUsers]);
+
+  useEffect(() => {
+    if (hasFetchedContactsRef.current) return;
+    hasFetchedContactsRef.current = true;
+
+    let isCancelled = false;
+    const loadContacts = async () => {
+      setIsLoadingContacts(true);
+      try {
+        await getContacts();
+      } finally {
+        if (!isCancelled) {
+          setIsLoadingContacts(false);
+        }
+      }
+    };
+
+    void loadContacts();
+    return () => {
+      isCancelled = true;
+    };
+  }, [getContacts]);
+
+  const ensureContactsLoaded = useCallback(async () => {
+    if (contacts.length) return;
+    setIsLoadingContacts(true);
+    try {
+      await getContacts();
+    } finally {
+      setIsLoadingContacts(false);
+    }
+  }, [contacts.length, getContacts]);
 
   useEffect(() => {
     if (!menuOpen) return;
@@ -173,18 +238,14 @@ const Sidebar = ({
     setMenuOpen(false);
     setIsCreateGroupOpen(true);
     setIsNewChatOpen(false);
-    if (!contacts.length) {
-      await getContacts();
-    }
+    await ensureContactsLoaded();
   };
 
   const openNewChatModal = async () => {
     setMenuOpen(false);
     setIsCreateGroupOpen(false);
     setIsNewChatOpen(true);
-    if (!contacts.length) {
-      await getContacts();
-    }
+    await ensureContactsLoaded();
   };
 
   const handleCreateGroup = async ({ name, participantIds }) => {
@@ -213,6 +274,29 @@ const Sidebar = ({
     setIsOpeningDirectChat(false);
   };
 
+  const handleStartContactChat = async (contactId) => {
+    const normalizedContactId = toNormalizedId(contactId);
+    if (!normalizedContactId) return;
+
+    const existingDirectConversation = directConversationByPeerId.get(normalizedContactId);
+    if (existingDirectConversation) {
+      const directConversationId = toNormalizedId(existingDirectConversation._id);
+      setSelectedConversation(existingDirectConversation);
+      setUnseenMessages((previousUnseenMessages) => ({
+        ...previousUnseenMessages,
+        [directConversationId]: 0,
+      }));
+      return;
+    }
+
+    setOpeningContactId(normalizedContactId);
+    try {
+      await createOrOpenDirectConversation(normalizedContactId);
+    } finally {
+      setOpeningContactId("");
+    }
+  };
+
   const toggleSelectedConversationArchive = async () => {
     const selectedConversationId = toNormalizedId(selectedConversation?._id);
     if (!selectedConversationId) return;
@@ -221,6 +305,10 @@ const Sidebar = ({
     });
     setMenuOpen(false);
   };
+
+  const hasSearchQuery = input.trim().length > 0;
+  const hasConversationResults = filteredConversations.length > 0;
+  const hasContactResults = filteredContacts.length > 0;
 
   return (
     <div
@@ -429,7 +517,7 @@ const Sidebar = ({
         </div>
       </div>
 
-      <div className="mt-4 space-y-1" role="list" aria-label={t("sidebar.searchConversations")}>
+      <div className="mt-4 space-y-5">
         {!usersLoading && (
           <div className="pb-2 px-1 flex items-center justify-end">
             <button
@@ -458,7 +546,7 @@ const Sidebar = ({
             </div>
           ))}
 
-        {!usersLoading && filteredConversations.length === 0 && (
+        {!usersLoading && !hasConversationResults && !hasContactResults && (
           <div className="glass-subtle border border-white/10 rounded-2xl p-5 text-center text-sm text-white/70">
             <p className="font-medium text-white/85">{t("sidebar.noConversationsFound")}</p>
             <p className="mt-1 text-xs text-white/55">
@@ -467,110 +555,208 @@ const Sidebar = ({
           </div>
         )}
 
-        {!usersLoading &&
-          filteredConversations.map((conversation, index) => {
-            const conversationId = toNormalizedId(conversation._id);
-            const peerId = getConversationPeerId(conversation);
-            const directOnline = Boolean(peerId && onlineUsers.includes(peerId));
-            const onlineParticipantsCount = (conversation.participants || []).filter(
-              (participant) =>
-                participant._id !== authUser?._id &&
-                onlineUsers.includes(toNormalizedId(participant._id))
-            ).length;
+        <section role="list" aria-label={t("sidebar.searchConversations")}>
+          <div className="px-1 pb-2">
+            <p className="text-[11px] uppercase tracking-wider text-white/45">
+              {t("sidebar.searchConversations")}
+            </p>
+          </div>
+          <div className="space-y-1">
+            {!usersLoading &&
+              filteredConversations.map((conversation, index) => {
+                const conversationId = toNormalizedId(conversation._id);
+                const peerId = getConversationPeerId(conversation);
+                const directOnline = Boolean(peerId && onlineUsers.includes(peerId));
+                const onlineParticipantsCount = (conversation.participants || []).filter(
+                  (participant) =>
+                    participant._id !== authUser?._id &&
+                    onlineUsers.includes(toNormalizedId(participant._id))
+                ).length;
 
-            const isActive =
-              toNormalizedId(selectedConversation?._id) === conversationId;
-            const unreadCount = Number(unseenMessages[conversationId] || 0);
-            const isPinnedConversation = isConversationPinned(conversation);
-            const isMutedConversation = isConversationMuted(conversation);
-            const title = getConversationTitle(conversation);
-            const subtitle = conversation.lastMessagePreview
-              ? conversation.lastMessagePreview
-              : isGroupConversation(conversation)
-                ? t("common.membersCount", {
-                    count: Math.max((conversation.participants || []).length - 1, 0),
-                  })
-                : directOnline
+                const isActive =
+                  toNormalizedId(selectedConversation?._id) === conversationId;
+                const unreadCount = Number(unseenMessages[conversationId] || 0);
+                const isPinnedConversation = isConversationPinned(conversation);
+                const isMutedConversation = isConversationMuted(conversation);
+                const title = getConversationTitle(conversation);
+                const subtitle = conversation.lastMessagePreview
+                  ? conversation.lastMessagePreview
+                  : isGroupConversation(conversation)
+                    ? t("common.membersCount", {
+                        count: Math.max((conversation.participants || []).length - 1, 0),
+                      })
+                    : directOnline
+                      ? t("common.onlineNow")
+                      : formatLastSeen(conversation.peer?.lastSeen);
+
+                return (
+                  <button
+                    type="button"
+                    key={conversationId}
+                    role="listitem"
+                    aria-current={isActive ? "true" : undefined}
+                    aria-label={`${title}${
+                      unreadCount ? t("sidebar.ariaUnreadSuffix", { count: unreadCount }) : ""
+                    }`}
+                    onClick={() => {
+                      setSelectedConversation(conversation);
+                      setUnseenMessages((previousUnseenMessages) => ({
+                        ...previousUnseenMessages,
+                        [conversationId]: 0,
+                      }));
+                    }}
+                    style={{ animationDelay: `${index * 28}ms` }}
+                    className={`w-full relative flex items-center gap-3 p-2.5 rounded-2xl cursor-pointer text-start transition-all duration-200 border ${
+                      isActive
+                        ? "bg-white/10 border-brand-300/40 shadow-soft"
+                        : "border-transparent hover:bg-white/7 hover:border-white/10"
+                    } ${
+                      isMutedConversation ? "opacity-80" : ""
+                    } ${isRtl ? "pl-3" : "pr-3"} stagger-item`}
+                  >
+                    <div className="relative">
+                      <img
+                        src={getConversationAvatar(conversation) || assets.avatar_icon}
+                        alt={`${title} avatar`}
+                        loading="lazy"
+                        decoding="async"
+                        width="44"
+                        height="44"
+                        className="w-11 h-11 rounded-full object-cover border border-white/20"
+                      />
+                      {isDirectConversation(conversation) && directOnline && (
+                        <>
+                          <span className="absolute -bottom-0.5 -right-0.5 h-3.5 w-3.5 rounded-full bg-success border-2 border-surface-900" />
+                          <span className="absolute -bottom-0.5 -right-0.5 h-3.5 w-3.5 rounded-full bg-success/80 animate-pulse-ring" />
+                        </>
+                      )}
+                      {isGroupConversation(conversation) && onlineParticipantsCount > 0 && (
+                        <span className="absolute -bottom-0.5 -right-0.5 min-w-4 h-4 px-1 rounded-full bg-success text-[10px] leading-4 text-surface-900 font-semibold border border-surface-900">
+                          {onlineParticipantsCount}
+                        </span>
+                      )}
+                    </div>
+                    <div className="min-w-0 flex-1">
+                      <p className="truncate text-sm font-medium tracking-wide">{title}</p>
+                      <p className="text-xs text-white/55 truncate mt-0.5">{subtitle}</p>
+                    </div>
+                    <div className="flex items-center gap-1.5">
+                      {isMutedConversation && (
+                        <span className="text-[10px] px-1.5 py-0.5 rounded-full border border-white/20 bg-white/8 text-white/70">
+                          {t("common.mutedBadge")}
+                        </span>
+                      )}
+                      {isPinnedConversation && (
+                        <span className="text-[10px] px-1.5 py-0.5 rounded-full border border-brand-200/35 bg-brand-500/20 text-brand-100">
+                          {t("common.pinBadge")}
+                        </span>
+                      )}
+                      {unreadCount > 0 && (
+                        <span
+                          className={`text-[11px] min-w-5 h-5 px-1.5 flex justify-center items-center rounded-full ${
+                            isMutedConversation
+                              ? "border border-white/20 bg-white/10 text-white/85"
+                              : "btn-gradient"
+                          }`}
+                        >
+                          {unreadCount}
+                        </span>
+                      )}
+                    </div>
+                  </button>
+                );
+              })}
+          </div>
+        </section>
+
+        <section role="list" aria-label={t("sidebar.contacts")}>
+          <div className="px-1 pb-2 flex items-center justify-between gap-2">
+            <p className="text-[11px] uppercase tracking-wider text-white/45">
+              {t("sidebar.contacts")}
+            </p>
+            {isLoadingContacts && (
+              <span className="text-[10px] text-white/45">{t("loginPage.pleaseWait")}</span>
+            )}
+          </div>
+          <div className="space-y-1">
+            {!isLoadingContacts && filteredContacts.length === 0 && (
+              <div className="rounded-xl border border-white/10 bg-white/5 px-3 py-3 text-xs text-white/60">
+                {hasSearchQuery
+                  ? t("sidebar.noContactsMatchSearch")
+                  : t("sidebar.noContactsAvailable")}
+              </div>
+            )}
+
+            {filteredContacts.map((contact, index) => {
+              const contactId = toNormalizedId(contact._id);
+              const hasExistingDirectConversation = directConversationByPeerId.has(contactId);
+              const existingConversation =
+                directConversationByPeerId.get(contactId) || null;
+              const existingConversationId = toNormalizedId(existingConversation?._id);
+              const existingUnreadCount = existingConversationId
+                ? Number(unseenMessages[existingConversationId] || 0)
+                : 0;
+              const isActiveContact = activeDirectPeerId === contactId;
+              const isContactOnline = Boolean(contactId && onlineUsers.includes(contactId));
+              const isOpeningThisContact = openingContactId === contactId;
+              const contactSubtitle = contact.bio
+                ? contact.bio
+                : isContactOnline
                   ? t("common.onlineNow")
-                  : formatLastSeen(conversation.peer?.lastSeen);
+                  : formatLastSeen(contact.lastSeen);
 
-            return (
-              <button
-                type="button"
-                key={conversationId}
-                role="listitem"
-                aria-current={isActive ? "true" : undefined}
-                aria-label={`${title}${
-                  unreadCount ? t("sidebar.ariaUnreadSuffix", { count: unreadCount }) : ""
-                }`}
-                onClick={() => {
-                  setSelectedConversation(conversation);
-                  setUnseenMessages((previousUnseenMessages) => ({
-                    ...previousUnseenMessages,
-                    [conversationId]: 0,
-                  }));
-                }}
-                style={{ animationDelay: `${index * 28}ms` }}
-                className={`w-full relative flex items-center gap-3 p-2.5 rounded-2xl cursor-pointer text-start transition-all duration-200 border ${
-                  isActive
-                    ? "bg-white/10 border-brand-300/40 shadow-soft"
-                    : "border-transparent hover:bg-white/7 hover:border-white/10"
-                } ${
-                  isMutedConversation ? "opacity-80" : ""
-                } ${isRtl ? "pl-3" : "pr-3"} stagger-item`}
-              >
-                <div className="relative">
-                  <img
-                    src={getConversationAvatar(conversation) || assets.avatar_icon}
-                    alt={`${title} avatar`}
-                    loading="lazy"
-                    decoding="async"
-                    width="44"
-                    height="44"
-                    className="w-11 h-11 rounded-full object-cover border border-white/20"
-                  />
-                  {isDirectConversation(conversation) && directOnline && (
-                    <>
-                      <span className="absolute -bottom-0.5 -right-0.5 h-3.5 w-3.5 rounded-full bg-success border-2 border-surface-900" />
-                      <span className="absolute -bottom-0.5 -right-0.5 h-3.5 w-3.5 rounded-full bg-success/80 animate-pulse-ring" />
-                    </>
-                  )}
-                  {isGroupConversation(conversation) && onlineParticipantsCount > 0 && (
-                    <span className="absolute -bottom-0.5 -right-0.5 min-w-4 h-4 px-1 rounded-full bg-success text-[10px] leading-4 text-surface-900 font-semibold border border-surface-900">
-                      {onlineParticipantsCount}
-                    </span>
-                  )}
-                </div>
-                <div className="min-w-0 flex-1">
-                  <p className="truncate text-sm font-medium tracking-wide">{title}</p>
-                  <p className="text-xs text-white/55 truncate mt-0.5">{subtitle}</p>
-                </div>
-                <div className="flex items-center gap-1.5">
-                  {isMutedConversation && (
+              return (
+                <button
+                  type="button"
+                  key={contactId}
+                  role="listitem"
+                  onClick={() => handleStartContactChat(contactId)}
+                  disabled={Boolean(openingContactId && !isOpeningThisContact)}
+                  style={{ animationDelay: `${index * 16}ms` }}
+                  className={`w-full relative flex items-center gap-3 p-2.5 rounded-2xl cursor-pointer text-start transition-all duration-200 border ${
+                    isActiveContact
+                      ? "bg-white/10 border-brand-300/40 shadow-soft"
+                      : "border-transparent hover:bg-white/7 hover:border-white/10"
+                  } disabled:opacity-60 disabled:cursor-not-allowed ${isRtl ? "pl-3" : "pr-3"} stagger-item`}
+                  aria-label={t("sidebar.startChatWith", { name: contact.fullName })}
+                >
+                  <div className="relative">
+                    <img
+                      src={contact.profilePic || assets.avatar_icon}
+                      alt={`${contact.fullName} avatar`}
+                      loading="lazy"
+                      decoding="async"
+                      width="44"
+                      height="44"
+                      className="w-11 h-11 rounded-full object-cover border border-white/20"
+                    />
+                    {isContactOnline && (
+                      <>
+                        <span className="absolute -bottom-0.5 -right-0.5 h-3.5 w-3.5 rounded-full bg-success border-2 border-surface-900" />
+                        <span className="absolute -bottom-0.5 -right-0.5 h-3.5 w-3.5 rounded-full bg-success/80 animate-pulse-ring" />
+                      </>
+                    )}
+                  </div>
+                  <div className="min-w-0 flex-1">
+                    <p className="truncate text-sm font-medium tracking-wide">
+                      {contact.fullName}
+                    </p>
+                    <p className="text-xs text-white/55 truncate mt-0.5">
+                      {isOpeningThisContact
+                        ? t("loginPage.pleaseWait")
+                        : contactSubtitle}
+                    </p>
+                  </div>
+                  {hasExistingDirectConversation && existingUnreadCount > 0 && (
                     <span className="text-[10px] px-1.5 py-0.5 rounded-full border border-white/20 bg-white/8 text-white/70">
-                      {t("common.mutedBadge")}
+                      {existingUnreadCount}
                     </span>
                   )}
-                  {isPinnedConversation && (
-                    <span className="text-[10px] px-1.5 py-0.5 rounded-full border border-brand-200/35 bg-brand-500/20 text-brand-100">
-                      {t("common.pinBadge")}
-                    </span>
-                  )}
-                  {unreadCount > 0 && (
-                    <span
-                      className={`text-[11px] min-w-5 h-5 px-1.5 flex justify-center items-center rounded-full ${
-                        isMutedConversation
-                          ? "border border-white/20 bg-white/10 text-white/85"
-                          : "btn-gradient"
-                      }`}
-                    >
-                      {unreadCount}
-                    </span>
-                  )}
-                </div>
-              </button>
-            );
-          })}
+                </button>
+              );
+            })}
+          </div>
+        </section>
       </div>
 
       <CreateGroupModal

@@ -502,10 +502,15 @@ body {
   }
 
   @media (hover: none), (pointer: coarse) {
-    .message-actions-row {
+    .message-content .message-actions-row {
+      display: none;
+      margin-top: 0.25rem;
+    }
+
+    .message-content .message-actions-row--open {
+      display: block;
       opacity: 1;
       pointer-events: auto;
-      margin-top: 0.25rem;
     }
   }
 

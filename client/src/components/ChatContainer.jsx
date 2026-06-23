@@ -164,6 +164,7 @@ const ChatContainer = ({
   const [activeSearchMatchIndex, setActiveSearchMatchIndex] = useState(0);
   const [openMessageMenuId, setOpenMessageMenuId] = useState(null);
   const [openReactionPickerId, setOpenReactionPickerId] = useState(null);
+  const [openTouchActionsMessageId, setOpenTouchActionsMessageId] = useState("");
   const [isMobileDetailsOpen, setIsMobileDetailsOpen] = useState(false);
   const [mentionQuery, setMentionQuery] = useState("");
   const [mentionRange, setMentionRange] = useState(null);
@@ -187,6 +188,18 @@ const ChatContainer = ({
   const [isSchedulePanelOpen, setIsSchedulePanelOpen] = useState(false);
   const [scheduledSendAtInput, setScheduledSendAtInput] = useState("");
   const [disappearAfterMsInput, setDisappearAfterMsInput] = useState("");
+
+  const handleCloseTouchActions = useCallback(() => {
+    setOpenTouchActionsMessageId("");
+  }, []);
+
+  const handleToggleTouchActions = useCallback((messageId) => {
+    const normalizedMessageId = String(messageId || "");
+    if (!normalizedMessageId) return;
+    setOpenTouchActionsMessageId((previousMessageId) =>
+      previousMessageId === normalizedMessageId ? "" : normalizedMessageId
+    );
+  }, []);
 
   const selectedConversationId = toNormalizedId(selectedConversation?._id);
   const selectedConversationPeerId = getConversationPeerId(selectedConversation);
@@ -704,6 +717,7 @@ const ChatContainer = ({
     }
 
     setReplyTo(null);
+    setOpenTouchActionsMessageId("");
     setPendingBelowCount(0);
     setIsNearBottom(true);
     scrollToBottom();
@@ -879,6 +893,7 @@ const ChatContainer = ({
     previousTailMessageIdRef.current = null;
     setOpenMessageMenuId(null);
     setOpenReactionPickerId(null);
+    setOpenTouchActionsMessageId("");
     setShowComposerEmoji(false);
     setIsSchedulePanelOpen(false);
     setScheduledSendAtInput("");
@@ -1010,6 +1025,27 @@ const ChatContainer = ({
       document.removeEventListener("keydown", handleEscape);
     };
   }, [showComposerEmoji]);
+
+  useEffect(() => {
+    if (!openTouchActionsMessageId) return;
+
+    const handleOutsideTouchActions = (event) => {
+      if (
+        typeof window === "undefined" ||
+        !window.matchMedia("(hover: none), (pointer: coarse)").matches
+      ) {
+        return;
+      }
+      if (!(event.target instanceof Element)) return;
+      if (event.target.closest(".message-content")) return;
+      handleCloseTouchActions();
+    };
+
+    document.addEventListener("pointerdown", handleOutsideTouchActions);
+    return () => {
+      document.removeEventListener("pointerdown", handleOutsideTouchActions);
+    };
+  }, [handleCloseTouchActions, openTouchActionsMessageId]);
 
   useEffect(() => {
     if (!selectedConversation?._id || !searchQuery.trim()) {
@@ -1456,6 +1492,7 @@ const ChatContainer = ({
             searchQuery={searchQuery}
             openMessageMenuId={openMessageMenuId}
             openReactionPickerId={openReactionPickerId}
+            openTouchActionsMessageId={openTouchActionsMessageId}
             messageElementRefs={messageElementRefs}
             onReact={handleReact}
             onReply={handleReply}
@@ -1470,6 +1507,7 @@ const ChatContainer = ({
             onOpenThread={openThreadPanelForMessage}
             onOpenMenuChange={handleOpenMenuChange}
             onOpenReactionChange={handleOpenReactionChange}
+            onToggleTouchActions={handleToggleTouchActions}
             onOpenLightbox={onOpenLightbox}
             onStartReached={handleStartReached}
             onAtBottomStateChange={handleAtBottomStateChange}
