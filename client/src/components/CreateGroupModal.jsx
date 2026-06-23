@@ -18,6 +18,7 @@ const CreateGroupModal = ({
   title = "",
   submitLabel = "",
   showGroupName = true,
+  selectionMode = "multiple",
   initialGroupName = "",
   initialSelectedIds = EMPTY_ID_LIST,
   excludedUserIds = EMPTY_ID_LIST,
@@ -39,6 +40,7 @@ const CreateGroupModal = ({
     () => (normalizedInitialSelectedIdsKey ? normalizedInitialSelectedIdsKey.split("|") : []),
     [normalizedInitialSelectedIdsKey]
   );
+  const isSingleSelectionMode = selectionMode === "single";
 
   useEffect(() => {
     if (!isOpen) return;
@@ -72,6 +74,13 @@ const CreateGroupModal = ({
     if (!normalizedUserId) return;
 
     setSelectedIds((previousSelectedIds) => {
+      if (isSingleSelectionMode) {
+        if (previousSelectedIds.size === 1 && previousSelectedIds.has(normalizedUserId)) {
+          return new Set();
+        }
+        return new Set([normalizedUserId]);
+      }
+
       const nextSelectedIds = new Set(previousSelectedIds);
       if (nextSelectedIds.has(normalizedUserId)) {
         nextSelectedIds.delete(normalizedUserId);

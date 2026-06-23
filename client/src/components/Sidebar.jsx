@@ -21,12 +21,6 @@ import {
 import { formatLastSeen } from "../lib/utils";
 
 const Sidebar = ({
-  focusSearchSignal = 0,
-  escapeSignal = 0,
-  keyboardUserId,
-  onFilteredUsersChange = () => {},
-  onMenuOpenChange = () => {},
-  onKeyboardUserHover,
   onOpenStarredMessages = () => {},
 }) => {
   const {
@@ -40,6 +34,7 @@ const Sidebar = ({
     setUnseenMessages,
     usersLoading = false,
     createGroupConversation,
+    createOrOpenDirectConversation,
     updateConversationPreferences = async () => null,
   } = useContext(ChatContext);
 
@@ -60,7 +55,9 @@ const Sidebar = ({
   const [input, setInput] = useState("");
   const [menuOpen, setMenuOpen] = useState(false);
   const [isCreateGroupOpen, setIsCreateGroupOpen] = useState(false);
+  const [isNewChatOpen, setIsNewChatOpen] = useState(false);
   const [isCreatingGroup, setIsCreatingGroup] = useState(false);
+  const [isOpeningDirectChat, setIsOpeningDirectChat] = useState(false);
   const [showArchivedConversations, setShowArchivedConversations] = useState(false);
   const menuRef = useRef(null);
   const searchInputRef = useRef(null);
@@ -114,29 +111,6 @@ const Sidebar = ({
       getConversations();
     }
   }, [authUser?._id, getConversations, onlineUsers]);
-
-  useEffect(() => {
-    onFilteredUsersChange(
-      filteredConversations.map((conversation) => toNormalizedId(conversation._id))
-    );
-  }, [filteredConversations, onFilteredUsersChange]);
-
-  useEffect(() => {
-    onMenuOpenChange(menuOpen || isCreateGroupOpen);
-    return () => onMenuOpenChange(false);
-  }, [isCreateGroupOpen, menuOpen, onMenuOpenChange]);
-
-  useEffect(() => {
-    if (!focusSearchSignal) return;
-    searchInputRef.current?.focus();
-    searchInputRef.current?.select();
-  }, [focusSearchSignal]);
-
-  useEffect(() => {
-    if (!escapeSignal) return;
-    setMenuOpen(false);
-    setIsCreateGroupOpen(false);
-  }, [escapeSignal]);
 
   useEffect(() => {
     if (!menuOpen) return;
@@ -198,6 +172,16 @@ const Sidebar = ({
   const openCreateGroupModal = async () => {
     setMenuOpen(false);
     setIsCreateGroupOpen(true);
+    setIsNewChatOpen(false);
+    if (!contacts.length) {
+      await getContacts();
+    }
+  };
+
+  const openNewChatModal = async () => {
+    setMenuOpen(false);
+    setIsCreateGroupOpen(false);
+    setIsNewChatOpen(true);
     if (!contacts.length) {
       await getContacts();
     }
@@ -214,6 +198,19 @@ const Sidebar = ({
       toast.success(t("sidebar.groupCreated"));
     }
     setIsCreatingGroup(false);
+  };
+
+  const handleCreateDirectChat = async ({ participantIds }) => {
+    const targetUserId = toNormalizedId(participantIds?.[0]);
+    if (!targetUserId) return;
+
+    setIsOpeningDirectChat(true);
+    const openedConversation = await createOrOpenDirectConversation(targetUserId);
+    if (openedConversation) {
+      setIsNewChatOpen(false);
+      toast.success(t("sidebar.chatOpened"));
+    }
+    setIsOpeningDirectChat(false);
   };
 
   const toggleSelectedConversationArchive = async () => {
@@ -270,6 +267,15 @@ const Sidebar = ({
                   isRtl ? "left-0" : "right-0"
                 }`}
               >
+                <button
+                  type="button"
+                  role="menuitem"
+                  onClick={openNewChatModal}
+                  className="w-full text-start px-3 py-2 rounded-lg text-sm hover:bg-white/10 flex items-center gap-2"
+                >
+                  <span className="h-2 w-2 rounded-full bg-brand-300" />
+                  {t("sidebar.newChat")}
+                </button>
                 <button
                   type="button"
                   role="menuitem"
@@ -504,14 +510,12 @@ const Sidebar = ({
                     [conversationId]: 0,
                   }));
                 }}
-                onMouseEnter={() => onKeyboardUserHover?.(conversationId)}
-                onFocus={() => onKeyboardUserHover?.(conversationId)}
                 style={{ animationDelay: `${index * 28}ms` }}
                 className={`w-full relative flex items-center gap-3 p-2.5 rounded-2xl cursor-pointer text-start transition-all duration-200 border ${
                   isActive
                     ? "bg-white/10 border-brand-300/40 shadow-soft"
                     : "border-transparent hover:bg-white/7 hover:border-white/10"
-                } ${keyboardUserId === conversationId && !isActive ? "border-brand-300/25 bg-white/[0.04]" : ""} ${
+                } ${
                   isMutedConversation ? "opacity-80" : ""
                 } ${isRtl ? "pl-3" : "pr-3"} stagger-item`}
               >
@@ -569,6 +573,18 @@ const Sidebar = ({
           })}
       </div>
 
+      <CreateGroupModal
+        isOpen={isNewChatOpen}
+        onClose={() => setIsNewChatOpen(false)}
+        contacts={contacts}
+        onSubmit={handleCreateDirectChat}
+        title={t("sidebar.newChat")}
+        submitLabel={t("sidebar.startChat")}
+        showGroupName={false}
+        selectionMode="single"
+        isSubmitting={isOpeningDirectChat}
+        excludedUserIds={[authUser?._id]}
+      />
       <CreateGroupModal
         isOpen={isCreateGroupOpen}
         onClose={() => setIsCreateGroupOpen(false)}

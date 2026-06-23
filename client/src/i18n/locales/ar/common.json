@@ -83,7 +83,10 @@
   "sidebar": {
     "tagline": "محادثات فورية بلمسة أفضل.",
     "openSidebarActions": "فتح إجراءات الشريط الجانبي",
+    "newChat": "دردشة جديدة",
     "newGroup": "مجموعة جديدة",
+    "startChat": "بدء الدردشة",
+    "chatOpened": "تم فتح الدردشة",
     "groupCreated": "تم إنشاء المجموعة",
     "starredMessages": "الرسائل المميزة",
     "archiveChat": "أرشفة الدردشة",

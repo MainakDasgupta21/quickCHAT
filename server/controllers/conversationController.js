@@ -490,9 +490,13 @@ export const createGroupConversation = async (req, res) => {
     res.json({ success: true, conversation: summary });
   } catch (error) {
     if (error?.code === 11000) {
+      const duplicateField = Object.keys(error?.keyPattern || {})[0] || "";
       return res.json({
         success: false,
-        message: "Conversation already exists",
+        message:
+          duplicateField === "directKey"
+            ? "Could not create group because of a legacy conversation key conflict. Please try again."
+            : "Conversation already exists",
       });
     }
     console.log(error.message);

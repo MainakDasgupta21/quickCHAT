@@ -83,7 +83,10 @@
   "sidebar": {
     "tagline": "Instant conversations, elevated.",
     "openSidebarActions": "Open sidebar actions",
+    "newChat": "New Chat",
     "newGroup": "New Group",
+    "startChat": "Start chat",
+    "chatOpened": "Chat opened",
     "groupCreated": "Group created",
     "starredMessages": "Starred Messages",
     "archiveChat": "Archive chat",

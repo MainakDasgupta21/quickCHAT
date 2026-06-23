@@ -44,7 +44,9 @@ const conversationSchema = new mongoose.Schema(
       default: null,
     },
     lastMessageAt: { type: Date, default: null },
-    directKey: { type: String, default: null },
+    // Only direct conversations should persist this key; keeping it undefined
+    // for groups prevents sparse-unique collisions on `null`.
+    directKey: { type: String, default: undefined },
   },
   { timestamps: true }
 );

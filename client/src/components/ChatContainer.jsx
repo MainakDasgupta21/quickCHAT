@@ -97,9 +97,6 @@ const toReportMessageLabel = (message, t) => {
 };
 
 const ChatContainer = ({
-  sendShortcutSignal = 0,
-  escapeSignal = 0,
-  onOverlayOpenChange = () => {},
   onOpenLightbox = () => {},
 }) => {
   const {
@@ -987,32 +984,6 @@ const ChatContainer = ({
   }, [selectedAudio?.previewUrl, selectedFile?.previewUrl, selectedImage?.previewUrl]);
 
   useEffect(() => {
-    if (!sendShortcutSignal) return;
-    handleSendMessage();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [sendShortcutSignal]);
-
-  useEffect(() => {
-    if (!escapeSignal) return;
-    setShowComposerEmoji(false);
-    setIsSchedulePanelOpen(false);
-    setShowSearch(false);
-    setOpenMessageMenuId(null);
-    setOpenReactionPickerId(null);
-    setIsMobileDetailsOpen(false);
-    clearMentionSuggestions();
-    closeThreadPanel();
-    closeForwardModal();
-    closeReportModal();
-  }, [
-    clearMentionSuggestions,
-    closeForwardModal,
-    closeReportModal,
-    closeThreadPanel,
-    escapeSignal,
-  ]);
-
-  useEffect(() => {
     if (!showComposerEmoji) return;
 
     const handleOutsideClick = (event) => {
@@ -1282,23 +1253,6 @@ const ChatContainer = ({
   ]);
 
   const activeSearchMatchId = searchMatchIds[activeSearchMatchIndex];
-  const hasInteractiveOverlayOpen =
-    showComposerEmoji ||
-    isSchedulePanelOpen ||
-    showSearch ||
-    isForwardModalOpen ||
-    isReportModalOpen ||
-    Boolean(openMessageMenuId) ||
-    Boolean(openReactionPickerId) ||
-    isMobileDetailsOpen ||
-    isThreadPanelOpen ||
-    Boolean(mentionRange && mentionSuggestions.length > 0);
-
-  useEffect(() => {
-    onOverlayOpenChange(hasInteractiveOverlayOpen);
-    return () => onOverlayOpenChange(false);
-  }, [hasInteractiveOverlayOpen, onOverlayOpenChange]);
-
   const typingIndicator = !messagesLoading && isSelectedConversationTyping && (
     <div className={`flex mb-4 animate-fade-in px-1 ${isRtl ? "justify-end" : "justify-start"}`}>
       <div
@@ -1502,7 +1456,6 @@ const ChatContainer = ({
             searchQuery={searchQuery}
             openMessageMenuId={openMessageMenuId}
             openReactionPickerId={openReactionPickerId}
-            closeSignal={escapeSignal}
             messageElementRefs={messageElementRefs}
             onReact={handleReact}
             onReply={handleReply}
