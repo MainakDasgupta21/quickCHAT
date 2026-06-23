@@ -101,9 +101,13 @@ export const resolveConversationFromParam = async ({
     if (!participantIds.includes(normalizedCurrentUserId)) {
       return { conversation: null, legacyPeerId: null, error: "Not authorized" };
     }
+    const legacyPeerIdForDirect =
+      conversationById.type === "direct"
+        ? getOtherParticipantIdForDirect(conversationById, normalizedCurrentUserId) || null
+        : null;
     return {
       conversation: conversationById,
-      legacyPeerId: null,
+      legacyPeerId: legacyPeerIdForDirect,
       error: null,
     };
   }
