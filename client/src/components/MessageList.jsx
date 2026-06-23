@@ -690,7 +690,7 @@ const MessageList = React.memo(function MessageList({
       style={{ height: "100%" }}
       data={messages}
       overscan={320}
-      atBottomThreshold={64}
+      atBottomThreshold={96}
       followOutput={false}
       computeItemKey={(index, message) =>
         message?.clientId || message?._id || `message-${index}`

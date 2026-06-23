@@ -136,6 +136,8 @@ const ChatContainer = ({
   const typingRef = useRef(false);
   const previousMessageCountRef = useRef(0);
   const previousTailMessageIdRef = useRef(null);
+  const lastAutoFollowKeyRef = useRef("");
+  const skipNextAutoFollowRef = useRef(false);
   const messageElementRefs = useRef({});
   const messageIndexByIdRef = useRef(new Map());
   const hasMoreMessagesRef = useRef(false);
@@ -719,6 +721,7 @@ const ChatContainer = ({
     setReplyTo(null);
     setOpenTouchActionsMessageId("");
     setPendingBelowCount(0);
+    skipNextAutoFollowRef.current = true;
     setIsNearBottom(true);
     scrollToBottom("smooth");
 
@@ -839,7 +842,7 @@ const ChatContainer = ({
   const tailMessageKey = useMemo(() => {
     if (!messages.length) return "";
     const tailMessage = messages[messages.length - 1];
-    return String(tailMessage?._id || tailMessage?.clientId || "");
+    return String(tailMessage?.clientId || tailMessage?._id || "");
   }, [messages]);
 
   useEffect(() => {
@@ -896,6 +899,8 @@ const ChatContainer = ({
     setIsNearBottom(true);
     previousMessageCountRef.current = 0;
     previousTailMessageIdRef.current = null;
+    lastAutoFollowKeyRef.current = "";
+    skipNextAutoFollowRef.current = false;
     setOpenMessageMenuId(null);
     setOpenReactionPickerId(null);
     setOpenTouchActionsMessageId("");
@@ -921,12 +926,19 @@ const ChatContainer = ({
   ]);
 
   useEffect(() => {
-    if (!selectedConversationId || !isNearBottom) return;
+    if (!selectedConversationId || !isNearBottom || !tailMessageKey) return;
+    const autoFollowKey = `${selectedConversationId}:${tailMessageKey}`;
+    if (skipNextAutoFollowRef.current) {
+      skipNextAutoFollowRef.current = false;
+      lastAutoFollowKeyRef.current = autoFollowKey;
+      return;
+    }
+    if (lastAutoFollowKeyRef.current === autoFollowKey) return;
+    lastAutoFollowKeyRef.current = autoFollowKey;
     // Keep the viewport pinned without animation to avoid near-bottom bounce loops.
     scrollToBottom("auto");
   }, [
     isNearBottom,
-    isSelectedConversationTyping,
     selectedConversationId,
     tailMessageKey,
     scrollToBottom,
@@ -1540,6 +1552,7 @@ const ChatContainer = ({
         <button
           type="button"
           onClick={() => {
+            skipNextAutoFollowRef.current = true;
             setIsNearBottom(true);
             setPendingBelowCount(0);
             scrollToBottom("smooth");
