@@ -43,10 +43,10 @@ export const addLocalTracksToPeerConnection = (peerConnection, stream) => {
 };
 
 export const createLocalOffer = async (peerConnection) => {
-  const offer = await peerConnection.createOffer({
-    offerToReceiveAudio: true,
-    offerToReceiveVideo: true,
-  });
+  // Local tracks are added before this runs, which already creates the
+  // correct sendrecv transceivers. Avoid the legacy offerToReceive* options so
+  // the offer reflects exactly the media we have (no phantom recvonly m-lines).
+  const offer = await peerConnection.createOffer();
   await peerConnection.setLocalDescription(offer);
   return peerConnection.localDescription;
 };

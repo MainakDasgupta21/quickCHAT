@@ -125,6 +125,7 @@ export const CallProvider = ({ children }) => {
     iceServers: [],
   });
   const inviteGuardTimeoutRef = useRef(null);
+  const disconnectGraceTimerRef = useRef(null);
 
   const blockedUserIdSet = useMemo(
     () =>
@@ -171,6 +172,10 @@ export const CallProvider = ({ children }) => {
   const resetToIdle = useCallback(
     ({ reason = "" } = {}) => {
       clearInviteGuardTimeout();
+      if (disconnectGraceTimerRef.current) {
+        clearTimeout(disconnectGraceTimerRef.current);
+        disconnectGraceTimerRef.current = null;
+      }
       operationTokenRef.current += 1;
 
       closePeerConnection(peerConnectionRef.current);
@@ -261,8 +266,19 @@ export const CallProvider = ({ children }) => {
     [callsEnabled, socket]
   );
 
+  const dropCallOnConnectionLoss = useCallback(() => {
+    const activeCallId = toNormalizedId(callStateRef.current.callId);
+    if (activeCallId) {
+      emitCallEvent(CALL_SOCKET_EVENTS.END, {
+        callId: activeCallId,
+        reason: CALL_END_REASONS.DISCONNECTED,
+      });
+    }
+    resetToIdle({ reason: CALL_END_REASONS.DISCONNECTED });
+  }, [emitCallEvent, resetToIdle]);
+
   const ensurePeerConnectionReady = useCallback(
-    async ({ callId, callType, operationToken }) => {
+    async ({ callId, callType, operationToken, localStream: providedStream = null }) => {
       if (peerConnectionRef.current) return peerConnectionRef.current;
 
       const iceServers = await getIceServers();
@@ -279,6 +295,7 @@ export const CallProvider = ({ children }) => {
           });
         },
         onRemoteTrack: (stream) => {
+          remoteStreamRef.current = stream;
           setRemoteStream(stream);
           updateCallState((previousState) => ({
             ...previousState,
@@ -290,7 +307,11 @@ export const CallProvider = ({ children }) => {
           }));
         },
         onConnectionStateChange: (connectionState) => {
-          if (connectionState === "connected") {
+          if (connectionState === "connected" || connectionState === "completed") {
+            if (disconnectGraceTimerRef.current) {
+              clearTimeout(disconnectGraceTimerRef.current);
+              disconnectGraceTimerRef.current = null;
+            }
             updateCallState((previousState) => ({
               ...previousState,
               phase: CALL_STATES.ACTIVE,
@@ -299,24 +320,30 @@ export const CallProvider = ({ children }) => {
             return;
           }
 
-          if (
-            connectionState === "failed" ||
-            connectionState === "disconnected" ||
-            connectionState === "closed"
-          ) {
-            const activeCallId = toNormalizedId(callStateRef.current.callId);
-            if (activeCallId) {
-              emitCallEvent(CALL_SOCKET_EVENTS.END, {
-                callId: activeCallId,
-                reason: CALL_END_REASONS.DISCONNECTED,
-              });
-            }
-            resetToIdle({ reason: CALL_END_REASONS.DISCONNECTED });
+          // A hard "failed" is terminal and unrecoverable.
+          if (connectionState === "failed") {
+            dropCallOnConnectionLoss();
+            return;
+          }
+
+          // "disconnected" is frequently transient during ICE churn; give the
+          // connection a grace window to recover before ending the call. We
+          // intentionally ignore "closed" because that is our own teardown.
+          if (connectionState === "disconnected") {
+            if (disconnectGraceTimerRef.current) return;
+            disconnectGraceTimerRef.current = setTimeout(() => {
+              disconnectGraceTimerRef.current = null;
+              const peerConnectionNow = peerConnectionRef.current;
+              if (!peerConnectionNow) return;
+              const stateNow = peerConnectionNow.connectionState;
+              if (stateNow === "connected" || stateNow === "completed") return;
+              dropCallOnConnectionLoss();
+            }, 8000);
           }
         },
       });
 
-      const stream = localStreamRef.current;
+      const stream = providedStream || localStreamRef.current;
       if (stream) {
         addLocalTracksToPeerConnection(peerConnection, stream);
       } else if (isVideoCallType(callType)) {
@@ -326,7 +353,7 @@ export const CallProvider = ({ children }) => {
       peerConnectionRef.current = peerConnection;
       return peerConnection;
     },
-    [emitCallEvent, getIceServers, isOperationCurrent, resetToIdle, updateCallState]
+    [dropCallOnConnectionLoss, emitCallEvent, getIceServers, isOperationCurrent, updateCallState]
   );
 
   const flushPendingIceCandidates = useCallback(async () => {
@@ -351,6 +378,12 @@ export const CallProvider = ({ children }) => {
         return null;
       }
 
+      // Sync the ref synchronously. Peer-connection setup runs in the same
+      // tick, before React commits the state update and the ref-sync effect.
+      // Without this, localStreamRef was still null when we built the peer
+      // connection, so no local tracks were ever added -> connected call with
+      // no audio and no video for the remote peer.
+      localStreamRef.current = stream;
       setLocalStream(stream);
       setIsMuted(false);
       setIsCameraEnabled(isVideoCallType(callType));
@@ -518,6 +551,7 @@ export const CallProvider = ({ children }) => {
         callId,
         callType,
         operationToken,
+        localStream: stream,
       });
       if (!isOperationCurrent(operationToken)) return false;
 
@@ -691,18 +725,20 @@ export const CallProvider = ({ children }) => {
       const normalizedCallType = currentState.callType || CALL_TYPES.AUDIO;
 
       try {
-        if (!localStreamRef.current) {
-          const stream = await initializeLocalMedia({
+        let mediaStream = localStreamRef.current;
+        if (!mediaStream) {
+          mediaStream = await initializeLocalMedia({
             callType: normalizedCallType,
             operationToken,
           });
-          if (!stream) return;
+          if (!mediaStream) return;
         }
 
         const peerConnection = await ensurePeerConnectionReady({
           callId: incomingCallId,
           callType: normalizedCallType,
           operationToken,
+          localStream: mediaStream,
         });
         if (!peerConnection || !isOperationCurrent(operationToken)) return;
 
@@ -747,18 +783,20 @@ export const CallProvider = ({ children }) => {
 
       const operationToken = nextOperationToken();
       try {
-        if (!localStreamRef.current) {
-          const stream = await initializeLocalMedia({
+        let mediaStream = localStreamRef.current;
+        if (!mediaStream) {
+          mediaStream = await initializeLocalMedia({
             callType: currentState.callType || CALL_TYPES.AUDIO,
             operationToken,
           });
-          if (!stream) return;
+          if (!mediaStream) return;
         }
 
         const peerConnection = await ensurePeerConnectionReady({
           callId: incomingCallId,
           callType: currentState.callType || CALL_TYPES.AUDIO,
           operationToken,
+          localStream: mediaStream,
         });
         if (!peerConnection || !isOperationCurrent(operationToken)) return;
 
@@ -931,6 +969,10 @@ export const CallProvider = ({ children }) => {
   useEffect(
     () => () => {
       clearInviteGuardTimeout();
+      if (disconnectGraceTimerRef.current) {
+        clearTimeout(disconnectGraceTimerRef.current);
+        disconnectGraceTimerRef.current = null;
+      }
       operationTokenRef.current += 1;
       closePeerConnection(peerConnectionRef.current);
       peerConnectionRef.current = null;
