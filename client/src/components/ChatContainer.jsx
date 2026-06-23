@@ -835,64 +835,62 @@ const ChatContainer = ({
   }, [hasMoreMessages]);
 
   useEffect(() => {
-    if (selectedConversation) {
-      const selectedConversationId = toNormalizedId(selectedConversation._id);
-      const normalizedPendingConversationId = toNormalizedId(
-        pendingConversationJumpTarget?.conversationId
-      );
-      const normalizedPendingMessageId = toNormalizedId(
-        pendingConversationJumpTarget?.messageId
-      );
-      const hasPendingGlobalJump =
-        selectedConversationId &&
-        normalizedPendingConversationId === selectedConversationId &&
-        normalizedPendingMessageId;
+    if (!selectedConversationId) return;
 
-      const loadSelectedConversationMessages = async () => {
-        if (hasPendingGlobalJump) {
-          setIsGlobalJumpFetchInProgress(true);
-          setPendingGlobalJumpMessageId(normalizedPendingMessageId);
-          clearPendingConversationJumpTarget(
-            selectedConversationId,
-            normalizedPendingMessageId
-          );
-          try {
-            await getMessages(selectedConversation._id, {
-              aroundMessageId: normalizedPendingMessageId,
-              force: true,
-            });
-          } finally {
-            setIsGlobalJumpFetchInProgress(false);
-          }
-          return;
+    const normalizedPendingConversationId = toNormalizedId(
+      pendingConversationJumpTarget?.conversationId
+    );
+    const normalizedPendingMessageId = toNormalizedId(
+      pendingConversationJumpTarget?.messageId
+    );
+    const hasPendingGlobalJump =
+      normalizedPendingConversationId === selectedConversationId &&
+      normalizedPendingMessageId;
+
+    const loadSelectedConversationMessages = async () => {
+      if (hasPendingGlobalJump) {
+        setIsGlobalJumpFetchInProgress(true);
+        setPendingGlobalJumpMessageId(normalizedPendingMessageId);
+        clearPendingConversationJumpTarget(
+          selectedConversationId,
+          normalizedPendingMessageId
+        );
+        try {
+          await getMessages(selectedConversationId, {
+            aroundMessageId: normalizedPendingMessageId,
+            force: true,
+          });
+        } finally {
+          setIsGlobalJumpFetchInProgress(false);
         }
+        return;
+      }
 
-        setIsGlobalJumpFetchInProgress(false);
-        setPendingGlobalJumpMessageId("");
-        await getMessages(selectedConversation._id);
-      };
+      setIsGlobalJumpFetchInProgress(false);
+      setPendingGlobalJumpMessageId("");
+      await getMessages(selectedConversationId);
+    };
 
-      void loadSelectedConversationMessages();
-      setShowSearch(false);
-      setSearchQuery("");
-      setSearchMatches([]);
-      setActiveSearchMatchIndex(0);
-      setPendingBelowCount(0);
-      setIsNearBottom(true);
-      previousMessageCountRef.current = 0;
-      previousTailMessageIdRef.current = null;
-      setOpenMessageMenuId(null);
-      setOpenReactionPickerId(null);
-      setShowComposerEmoji(false);
-      setIsSchedulePanelOpen(false);
-      setScheduledSendAtInput("");
-      setDisappearAfterMsInput("");
-      setIsMobileDetailsOpen(false);
-      closeThreadPanel();
-      closeForwardModal();
-      closeReportModal();
-      clearMentionSuggestions();
-    }
+    void loadSelectedConversationMessages();
+    setShowSearch(false);
+    setSearchQuery("");
+    setSearchMatches([]);
+    setActiveSearchMatchIndex(0);
+    setPendingBelowCount(0);
+    setIsNearBottom(true);
+    previousMessageCountRef.current = 0;
+    previousTailMessageIdRef.current = null;
+    setOpenMessageMenuId(null);
+    setOpenReactionPickerId(null);
+    setShowComposerEmoji(false);
+    setIsSchedulePanelOpen(false);
+    setScheduledSendAtInput("");
+    setDisappearAfterMsInput("");
+    setIsMobileDetailsOpen(false);
+    closeThreadPanel();
+    closeForwardModal();
+    closeReportModal();
+    clearMentionSuggestions();
   }, [
     clearPendingConversationJumpTarget,
     clearMentionSuggestions,
@@ -902,7 +900,7 @@ const ChatContainer = ({
     getMessages,
     pendingConversationJumpTarget?.conversationId,
     pendingConversationJumpTarget?.messageId,
-    selectedConversation,
+    selectedConversationId,
   ]);
 
   useEffect(() => {

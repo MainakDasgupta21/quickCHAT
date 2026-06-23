@@ -507,22 +507,36 @@ export const ChatProvider = ({ children }) => {
       if (!normalizedServerConversationId) return;
 
       setConversations((previousConversations) => {
+        let didUpdateConversationIdentity = false;
         const nextConversations = previousConversations.map((conversation) => {
           const conversationId = toNormalizedId(conversation._id);
           const peerId = getConversationPeerId(conversation);
-          if (
+          const shouldReconcileConversation =
             conversationId === normalizedServerConversationId ||
             conversationId === normalizedTargetId ||
-            peerId === normalizedTargetId
-          ) {
-            return {
-              ...conversation,
-              _id: normalizedServerConversationId,
-              type: conversationType || conversation.type,
-            };
+            peerId === normalizedTargetId;
+          if (!shouldReconcileConversation) {
+            return conversation;
           }
-          return conversation;
+
+          const nextConversationType = conversationType || conversation.type;
+          const hasSameIdentity =
+            conversationId === normalizedServerConversationId &&
+            conversation.type === nextConversationType;
+          if (hasSameIdentity) {
+            return conversation;
+          }
+
+          didUpdateConversationIdentity = true;
+          return {
+            ...conversation,
+            _id: normalizedServerConversationId,
+            type: nextConversationType,
+          };
         });
+        if (!didUpdateConversationIdentity) {
+          return previousConversations;
+        }
         return sortConversationsByRecent(nextConversations);
       });
 
@@ -530,18 +544,27 @@ export const ChatProvider = ({ children }) => {
         if (!previousConversation) return previousConversation;
         const previousConversationId = toNormalizedId(previousConversation._id);
         const previousPeerId = getConversationPeerId(previousConversation);
-        if (
+        const shouldReconcileSelectedConversation =
           previousConversationId === normalizedServerConversationId ||
           previousConversationId === normalizedTargetId ||
-          previousPeerId === normalizedTargetId
-        ) {
-          return {
-            ...previousConversation,
-            _id: normalizedServerConversationId,
-            type: conversationType || previousConversation.type,
-          };
+          previousPeerId === normalizedTargetId;
+        if (!shouldReconcileSelectedConversation) {
+          return previousConversation;
         }
-        return previousConversation;
+
+        const nextConversationType = conversationType || previousConversation.type;
+        const hasSameIdentity =
+          previousConversationId === normalizedServerConversationId &&
+          previousConversation.type === nextConversationType;
+        if (hasSameIdentity) {
+          return previousConversation;
+        }
+
+        return {
+          ...previousConversation,
+          _id: normalizedServerConversationId,
+          type: nextConversationType,
+        };
       });
 
       setUnseenMessages((previousUnseenMessages) => {
@@ -2377,10 +2400,16 @@ export const ChatProvider = ({ children }) => {
 
   useEffect(() => {
     if (!selectedConversation) return;
+    const normalizedSelectedConversationId = toNormalizedId(selectedConversation._id);
+    if (!normalizedSelectedConversationId) return;
+
     const normalizedSelectedConversation = resolveConversationByTargetId(
-      selectedConversation._id
+      normalizedSelectedConversationId
     );
-    if (normalizedSelectedConversation) {
+    if (
+      normalizedSelectedConversation &&
+      normalizedSelectedConversation !== selectedConversation
+    ) {
       setSelectedConversation(normalizedSelectedConversation);
     }
   }, [conversations, resolveConversationByTargetId, selectedConversation]);
