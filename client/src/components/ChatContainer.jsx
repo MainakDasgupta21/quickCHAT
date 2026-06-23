@@ -136,8 +136,7 @@ const ChatContainer = ({
   const typingRef = useRef(false);
   const previousMessageCountRef = useRef(0);
   const previousTailMessageIdRef = useRef(null);
-  const lastAutoFollowKeyRef = useRef("");
-  const skipNextAutoFollowRef = useRef(false);
+  const pendingBottomExitTimeoutRef = useRef(null);
   const messageElementRefs = useRef({});
   const messageIndexByIdRef = useRef(new Map());
   const hasMoreMessagesRef = useRef(false);
@@ -721,7 +720,6 @@ const ChatContainer = ({
     setReplyTo(null);
     setOpenTouchActionsMessageId("");
     setPendingBelowCount(0);
-    skipNextAutoFollowRef.current = true;
     setIsNearBottom(true);
     scrollToBottom("smooth");
 
@@ -839,11 +837,6 @@ const ChatContainer = ({
     });
     return indexById;
   }, [messages]);
-  const tailMessageKey = useMemo(() => {
-    if (!messages.length) return "";
-    const tailMessage = messages[messages.length - 1];
-    return String(tailMessage?.clientId || tailMessage?._id || "");
-  }, [messages]);
 
   useEffect(() => {
     messageIndexByIdRef.current = messageIndexById;
@@ -899,8 +892,10 @@ const ChatContainer = ({
     setIsNearBottom(true);
     previousMessageCountRef.current = 0;
     previousTailMessageIdRef.current = null;
-    lastAutoFollowKeyRef.current = "";
-    skipNextAutoFollowRef.current = false;
+    if (pendingBottomExitTimeoutRef.current) {
+      clearTimeout(pendingBottomExitTimeoutRef.current);
+      pendingBottomExitTimeoutRef.current = null;
+    }
     setOpenMessageMenuId(null);
     setOpenReactionPickerId(null);
     setOpenTouchActionsMessageId("");
@@ -923,25 +918,6 @@ const ChatContainer = ({
     pendingConversationJumpTarget?.conversationId,
     pendingConversationJumpTarget?.messageId,
     selectedConversationId,
-  ]);
-
-  useEffect(() => {
-    if (!selectedConversationId || !isNearBottom || !tailMessageKey) return;
-    const autoFollowKey = `${selectedConversationId}:${tailMessageKey}`;
-    if (skipNextAutoFollowRef.current) {
-      skipNextAutoFollowRef.current = false;
-      lastAutoFollowKeyRef.current = autoFollowKey;
-      return;
-    }
-    if (lastAutoFollowKeyRef.current === autoFollowKey) return;
-    lastAutoFollowKeyRef.current = autoFollowKey;
-    // Keep the viewport pinned without animation to avoid near-bottom bounce loops.
-    scrollToBottom("auto");
-  }, [
-    isNearBottom,
-    selectedConversationId,
-    tailMessageKey,
-    scrollToBottom,
   ]);
 
   useEffect(() => {
@@ -992,6 +968,9 @@ const ChatContainer = ({
       clearInterval(recordingIntervalRef.current);
       audioStreamRef.current?.getTracks().forEach((track) => track.stop());
       clearTimeout(searchTimeoutRef.current);
+      if (pendingBottomExitTimeoutRef.current) {
+        clearTimeout(pendingBottomExitTimeoutRef.current);
+      }
     },
     []
   );
@@ -1259,12 +1238,23 @@ const ChatContainer = ({
 
   const handleAtBottomStateChange = useCallback((atBottom) => {
     const nearBottom = Boolean(atBottom);
-    setIsNearBottom((previousNearBottom) =>
-      previousNearBottom === nearBottom ? previousNearBottom : nearBottom
-    );
     if (nearBottom) {
+      if (pendingBottomExitTimeoutRef.current) {
+        clearTimeout(pendingBottomExitTimeoutRef.current);
+        pendingBottomExitTimeoutRef.current = null;
+      }
+      setIsNearBottom(true);
       setPendingBelowCount((previousCount) => (previousCount === 0 ? previousCount : 0));
+      return;
     }
+
+    if (pendingBottomExitTimeoutRef.current) {
+      clearTimeout(pendingBottomExitTimeoutRef.current);
+    }
+    pendingBottomExitTimeoutRef.current = setTimeout(() => {
+      setIsNearBottom(false);
+      pendingBottomExitTimeoutRef.current = null;
+    }, 140);
   }, []);
 
   const handleJumpToMessage = useCallback(
@@ -1526,6 +1516,7 @@ const ChatContainer = ({
             onOpenReactionChange={handleOpenReactionChange}
             onToggleTouchActions={handleToggleTouchActions}
             onOpenLightbox={onOpenLightbox}
+            followOutputMode={isNearBottom ? "auto" : false}
             onStartReached={handleStartReached}
             onAtBottomStateChange={handleAtBottomStateChange}
             footer={typingIndicator}
@@ -1552,7 +1543,6 @@ const ChatContainer = ({
         <button
           type="button"
           onClick={() => {
-            skipNextAutoFollowRef.current = true;
             setIsNearBottom(true);
             setPendingBelowCount(0);
             scrollToBottom("smooth");

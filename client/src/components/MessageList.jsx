@@ -631,6 +631,7 @@ const MessageList = React.memo(function MessageList({
   virtuosoRef,
   onStartReached,
   onAtBottomStateChange,
+  followOutputMode = false,
   footer,
   ariaLabel = "Messages",
   conversationType = "direct",
@@ -691,7 +692,7 @@ const MessageList = React.memo(function MessageList({
       data={messages}
       overscan={320}
       atBottomThreshold={96}
-      followOutput={false}
+      followOutput={followOutputMode}
       computeItemKey={(index, message) =>
         message?.clientId || message?._id || `message-${index}`
       }
