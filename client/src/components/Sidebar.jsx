@@ -390,13 +390,13 @@ const Sidebar = ({
 
   return (
     <div
-      className={`h-full px-4 py-5 lg:px-5 lg:py-6 border-white/10 ${
+      className={`h-full flex flex-col overflow-hidden px-4 py-5 lg:px-5 lg:py-6 border-white/10 ${
         isRtl ? "border-l" : "border-r"
-      } bg-[linear-gradient(180deg,rgba(132,123,194,0.1),rgba(20,18,33,0.65))] text-white overflow-y-auto ${
+      } bg-[linear-gradient(180deg,rgba(132,123,194,0.1),rgba(20,18,33,0.65))] text-white ${
         selectedConversation ? "max-md:hidden" : ""
       }`}
     >
-      <div className="pb-5 border-b border-white/10">
+      <div className="shrink-0 pb-5 border-b border-white/10">
         <div className="flex justify-between items-center gap-3">
           <div>
             <img
@@ -582,7 +582,7 @@ const Sidebar = ({
         </div>
       </div>
 
-      <div className="mt-4 space-y-5">
+      <div className="mt-4 flex-1 min-h-0 overflow-y-auto space-y-5">
         {!usersLoading && (
           <div className="pb-2 px-1 flex items-center justify-end">
             <button

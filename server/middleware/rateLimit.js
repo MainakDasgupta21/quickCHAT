@@ -49,3 +49,9 @@ export const reportActionRateLimiter = createJsonRateLimiter({
         max: Number(process.env.REPORT_ACTION_RATE_LIMIT_MAX || 40),
         message: "Too many reports submitted. Please try again later.",
 });
+
+export const callIceRateLimiter = createJsonRateLimiter({
+        windowMs: 60 * 1000,
+        max: Number(process.env.CALL_ICE_CONFIG_RATE_LIMIT_MAX || 30),
+        message: "Too many call setup requests. Please try again shortly.",
+});

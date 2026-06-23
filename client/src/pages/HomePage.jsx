@@ -9,10 +9,14 @@ import RightSidebar from "../components/RightSidebar";
 import Lightbox from "../components/Lightbox";
 import GlobalSearchModal from "../components/GlobalSearchModal";
 import StarredMessagesModal from "../components/StarredMessagesModal";
+import IncomingCallModal from "../components/calls/IncomingCallModal";
+import CallOverlay from "../components/calls/CallOverlay";
 import { ChatContext } from "../../context/ChatContext";
+import { useCall } from "../../context/CallContext";
 
 const HomePage = () => {
   const { selectedConversation } = useContext(ChatContext);
+  const { callsEnabled } = useCall();
   const [lightboxItems, setLightboxItems] = useState([]);
   const [lightboxIndex, setLightboxIndex] = useState(0);
   const [isGlobalSearchOpen, setIsGlobalSearchOpen] = useState(false);
@@ -70,6 +74,12 @@ const HomePage = () => {
         isOpen={isStarredMessagesOpen}
         onClose={() => setIsStarredMessagesOpen(false)}
       />
+      {callsEnabled && (
+        <>
+          <IncomingCallModal />
+          <CallOverlay />
+        </>
+      )}
     </div>
   );
 };

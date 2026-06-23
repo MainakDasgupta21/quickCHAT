@@ -92,6 +92,7 @@ export const AuthProvider = ({ children }) => {
   });
   const [isLoggingOut, setIsLoggingOut] = useState(false);
   const logoutInFlightRef = useRef(false);
+  const callTeardownHandlerRef = useRef(null);
   const blockedUserIds = useMemo(
     () => toNormalizedBlockedUserIds(authUser?.blockedUsers),
     [authUser?.blockedUsers]
@@ -129,6 +130,25 @@ export const AuthProvider = ({ children }) => {
         ),
       };
     });
+  }, []);
+
+  const registerCallTeardownHandler = useCallback((handler) => {
+    callTeardownHandlerRef.current = typeof handler === "function" ? handler : null;
+    return () => {
+      if (callTeardownHandlerRef.current === handler) {
+        callTeardownHandlerRef.current = null;
+      }
+    };
+  }, []);
+
+  const executeRegisteredCallTeardown = useCallback(async () => {
+    const teardownHandler = callTeardownHandlerRef.current;
+    if (typeof teardownHandler !== "function") return;
+    try {
+      await teardownHandler();
+    } catch {
+      // Call teardown should be best-effort and must not block logout.
+    }
   }, []);
 
   const toggleSound = useCallback(() => {
@@ -481,6 +501,7 @@ export const AuthProvider = ({ children }) => {
     logoutInFlightRef.current = true;
     setIsLoggingOut(true);
     try {
+      await executeRegisteredCallTeardown();
       try {
         await unsubscribeCurrentDeviceFromPush(axios);
       } catch {
@@ -506,7 +527,7 @@ export const AuthProvider = ({ children }) => {
       logoutInFlightRef.current = false;
       setIsLoggingOut(false);
     }
-  }, [socket, t]);
+  }, [executeRegisteredCallTeardown, socket, t]);
 
   //update user profile
   const updateProfile = async (body) => {
@@ -617,12 +638,13 @@ export const AuthProvider = ({ children }) => {
       setOnlineUsers([]);
       setConnectionStatus("disconnected");
       setIsAuthLoading(false);
+      void executeRegisteredCallTeardown();
       setSocket((existingSocket) => {
         existingSocket?.disconnect();
         return null;
       });
     }
-  }, [authUser?._id, token, checkAuth]);
+  }, [authUser?._id, token, checkAuth, executeRegisteredCallTeardown]);
 
   useEffect(() => {
     if (!authUser?._id) {
@@ -676,6 +698,7 @@ export const AuthProvider = ({ children }) => {
     fetchBlockedUsers,
     blockUser,
     unblockUser,
+    registerCallTeardownHandler,
   };
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;

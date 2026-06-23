@@ -12,11 +12,14 @@ import conversationRouter from "./routes/conversationRoutes.js";
 import pushRouter from "./routes/pushRoutes.js";
 import reportRouter from "./routes/reportRoutes.js";
 import uploadRouter from "./routes/uploadRoutes.js";
+import callRouter from "./routes/callRoutes.js";
 import Message from "./models/message.js";
 import Conversation from "./models/Conversation.js";
 import User from "./models/User.js";
 import { getConversationRoomName } from "./lib/conversationHelpers.js";
 import { startMessageScheduler } from "./lib/messageScheduler.js";
+import { isCallsFeatureEnabled, registerCallSignalingHandlers } from "./lib/callSignaling.js";
+import { hasTwilioTurnConfig } from "./lib/twilioTurn.js";
 import { Server } from "socket.io"
 
 
@@ -208,6 +211,13 @@ const markPendingDelivered = async (receiverId) => {
 io.on("connection", (socket) => {
         const userId = socket.userId;
         console.log("User Connected", userId);
+        const callSignaling = registerCallSignalingHandlers({
+                io,
+                socket,
+                getUserSocketIds,
+                isUserOnline,
+                callsEnabled: isCallsFeatureEnabled(),
+        });
 
         if (userId) {
                 const didBecomeOnline = addUserSocket(userId, socket.id);
@@ -343,6 +353,10 @@ io.on("connection", (socket) => {
         socket.on("disconnect", async () => {
                 console.log("User Disconnected", userId);
                 const didBecomeOffline = removeUserSocket(userId, socket.id);
+                callSignaling.handleDisconnect({
+                        disconnectedSocketId: socket.id,
+                        isUserOffline: didBecomeOffline,
+                });
                 if (didBecomeOffline) {
                         const lastSeen = new Date();
                         try {
@@ -376,10 +390,18 @@ app.use("/api/conversations", conversationRouter);
 app.use("/api/reports", reportRouter);
 app.use("/api/push", pushRouter);
 app.use("/api/upload", uploadRouter);
+app.use("/api/calls", callRouter);
 
 //connect to MongoDB
 await connectDB();
 startMessageScheduler();
+if (!isCallsFeatureEnabled()) {
+        console.log("Calling feature flag is disabled (CALLS_ENABLED=false).");
+} else if (!hasTwilioTurnConfig()) {
+        console.log(
+                "Calling is enabled but Twilio TURN credentials are missing. ICE endpoint will return 503 until configured."
+        );
+}
 
 
 if (process.env.NODE_ENV !== 'production') {

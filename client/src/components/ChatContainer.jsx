@@ -32,12 +32,14 @@ import { uploadFileToCloudinary } from "../lib/mediaUpload";
 import { ChatContext } from "../../context/ChatContext";
 import { AuthContext } from "../../context/AuthContext";
 import { useLocale } from "../../context/LocaleContext";
+import { useCall } from "../../context/CallContext";
 import toast from "react-hot-toast";
 import MessageList from "./MessageList";
 import RightSidebar from "./RightSidebar";
 import ForwardMessageModal from "./ForwardMessageModal";
 import ReportModal from "./ReportModal";
 import ConversationAvatar from "./ConversationAvatar";
+import { CALL_TYPES, CALL_STATES } from "../lib/webrtc/callContract";
 
 const EmojiPicker = lazy(() => import("emoji-picker-react"));
 
@@ -131,6 +133,7 @@ const ChatContainer = ({
     clearPendingConversationJumpTarget = () => {},
   } = useContext(ChatContext);
   const { authUser, onlineUsers, axios } = useContext(AuthContext);
+  const { callsEnabled, hasActiveCall, callState, startCall } = useCall();
   const { isRtl, t } = useLocale();
   const virtuosoRef = useRef(null);
   const typingTimeoutRef = useRef(null);
@@ -228,6 +231,16 @@ const ChatContainer = ({
   const isDirectPeerOnline = Boolean(
     selectedConversationPeerId && onlineUsers.includes(selectedConversationPeerId)
   );
+  const canShowCallActions = Boolean(
+    callsEnabled && isDirectSelectedConversation && selectedConversationPeerId
+  );
+  const isCallActionDisabled = Boolean(
+    isDirectConversationBlocked || hasActiveCall
+  );
+  const isCallActiveForSelectedConversation = Boolean(
+    callState.phase !== CALL_STATES.IDLE &&
+      toNormalizedId(callState.conversationId) === selectedConversationId
+  );
   const participantNameById = useMemo(
     () =>
       new Map(
@@ -298,6 +311,26 @@ const ChatContainer = ({
       )
       .slice(0, 6);
   }, [mentionDirectory.list, mentionQuery, mentionRange]);
+  const triggerCall = useCallback(
+    async (callType) => {
+      if (!canShowCallActions || !selectedConversationId || !selectedConversationPeerId) return;
+      await startCall({
+        callType,
+        conversationId: selectedConversationId,
+        peerId: selectedConversationPeerId,
+        peerName: selectedConversationTitle,
+        peerAvatar: selectedConversationAvatar,
+      });
+    },
+    [
+      canShowCallActions,
+      selectedConversationAvatar,
+      selectedConversationId,
+      selectedConversationPeerId,
+      selectedConversationTitle,
+      startCall,
+    ]
+  );
   const threadRootMessage = useMemo(
     () =>
       threadMessages.find(
@@ -1388,6 +1421,30 @@ const ChatContainer = ({
               className={`w-6 ${isRtl ? "rotate-180" : ""}`}
             />
           </button>
+          {canShowCallActions && (
+            <>
+              <button
+                type="button"
+                onClick={() => triggerCall(CALL_TYPES.AUDIO)}
+                disabled={isCallActionDisabled}
+                className={`icon-btn h-9 w-9 ${isCallActionDisabled ? "opacity-40 cursor-not-allowed" : ""}`}
+                aria-label={t("call.startVoiceAria")}
+                title={t("call.voiceLabel")}
+              >
+                <span aria-hidden="true">📞</span>
+              </button>
+              <button
+                type="button"
+                onClick={() => triggerCall(CALL_TYPES.VIDEO)}
+                disabled={isCallActionDisabled}
+                className={`icon-btn h-9 w-9 ${isCallActionDisabled ? "opacity-40 cursor-not-allowed" : ""}`}
+                aria-label={t("call.startVideoAria")}
+                title={t("call.videoLabel")}
+              >
+                <span aria-hidden="true">🎥</span>
+              </button>
+            </>
+          )}
           <button
             type="button"
             onClick={() => {
@@ -1410,6 +1467,13 @@ const ChatContainer = ({
             <img src={assets.help_icon} alt="" className="w-4" />
           </button>
         </div>
+        {isCallActiveForSelectedConversation && (
+          <div className="chat-column mt-2 rounded-lg border border-brand-300/30 bg-brand-500/12 px-3 py-1.5 text-xs text-brand-100">
+            {callState.phase === CALL_STATES.ACTIVE
+              ? t("call.activeBanner")
+              : t("call.inProgressBanner")}
+          </div>
+        )}
         {showSearch && (
           <div className="chat-column mt-3 flex items-center gap-2 animate-fade-in">
             <input
