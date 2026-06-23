@@ -59,8 +59,45 @@ export const createLocalAnswer = async (peerConnection) => {
 
 export const applyRemoteDescription = async (peerConnection, sdp) => {
   if (!peerConnection || !sdp) return;
-  const description = new RTCSessionDescription(sdp);
-  await peerConnection.setRemoteDescription(description);
+  const rawSdp = String(sdp.sdp || "");
+  const baseDescription = {
+    type: sdp.type,
+    sdp: rawSdp,
+  };
+
+  const normalizeSdpForRetry = (value) => {
+    const normalizedLineBreaks = String(value || "")
+      .replace(/\r\n/g, "\n")
+      .replace(/\r/g, "\n");
+    const lines = normalizedLineBreaks.split("\n");
+
+    // Chromium can reject some remote SDP payloads that include legacy
+    // "repair-window" fmtp attributes. Remove only this known problematic
+    // line and preserve all other signaling metadata.
+    const cleanedLines = lines.filter((line) => {
+      const trimmedLine = String(line || "").trim();
+      if (!trimmedLine) return false;
+      return !/^a=fmtp:\d+\s+repair-window=\d+$/i.test(trimmedLine);
+    });
+
+    if (!cleanedLines.length) return "";
+    return `${cleanedLines.join("\r\n")}\r\n`;
+  };
+
+  try {
+    await peerConnection.setRemoteDescription(new RTCSessionDescription(baseDescription));
+  } catch (error) {
+    const fallbackSdp = normalizeSdpForRetry(rawSdp);
+    if (!fallbackSdp || fallbackSdp === rawSdp) {
+      throw error;
+    }
+    await peerConnection.setRemoteDescription(
+      new RTCSessionDescription({
+        type: sdp.type,
+        sdp: fallbackSdp,
+      })
+    );
+  }
 };
 
 export const addRemoteIceCandidate = async (peerConnection, candidate) => {

@@ -219,7 +219,8 @@ const sanitizeSdp = (sdp) => {
   const allowedTypes = new Set(["offer", "answer", "rollback", "pranswer"]);
   if (!allowedTypes.has(type)) return null;
 
-  const value = String(sdp.sdp || "").trim();
+  const rawValue = typeof sdp.sdp === "string" ? sdp.sdp : "";
+  const value = rawValue.replace(/\u0000/g, "");
   if (!value || value.length > CALL_MAX_SDP_LENGTH) return null;
   return { type, sdp: value };
 };
