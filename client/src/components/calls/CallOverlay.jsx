@@ -10,6 +10,7 @@ const CallOverlay = () => {
   const { callState, hasActiveCall, localStream, remoteStream } = useCall();
   const { t } = useLocale();
   const remoteVideoRef = useRef(null);
+  const remoteAudioRef = useRef(null);
   const localVideoRef = useRef(null);
   const [activeDurationSeconds, setActiveDurationSeconds] = useState(0);
 
@@ -46,7 +47,26 @@ const CallOverlay = () => {
 
   useEffect(() => {
     if (!remoteVideoRef.current) return;
-    remoteVideoRef.current.srcObject = remoteStream || null;
+    const videoElement = remoteVideoRef.current;
+    videoElement.srcObject = remoteStream || null;
+    if (remoteStream) {
+      const playPromise = videoElement.play();
+      if (playPromise?.catch) {
+        playPromise.catch(() => {});
+      }
+    }
+  }, [remoteStream]);
+
+  useEffect(() => {
+    if (!remoteAudioRef.current) return;
+    const audioElement = remoteAudioRef.current;
+    audioElement.srcObject = remoteStream || null;
+    if (remoteStream) {
+      const playPromise = audioElement.play();
+      if (playPromise?.catch) {
+        playPromise.catch(() => {});
+      }
+    }
   }, [remoteStream]);
 
   useEffect(() => {
@@ -85,10 +105,12 @@ const CallOverlay = () => {
         </div>
 
         <div className="relative w-full max-w-3xl flex-1 min-h-0 my-6 rounded-3xl overflow-hidden border border-white/15 bg-black/40">
+          <audio ref={remoteAudioRef} autoPlay playsInline className="hidden" />
           {isVideoCall && remoteStream ? (
             <video
               ref={remoteVideoRef}
               autoPlay
+              muted
               playsInline
               className="h-full w-full object-cover"
             />
