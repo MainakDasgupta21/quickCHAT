@@ -4,20 +4,34 @@ const toPositiveInt = (value, fallback) => {
   return Math.floor(parsedValue);
 };
 
-const TWILIO_ACCOUNT_SID = String(process.env.TWILIO_ACCOUNT_SID || "").trim();
-const TWILIO_AUTH_TOKEN = String(process.env.TWILIO_AUTH_TOKEN || "").trim();
-const TWILIO_TURN_TTL_SECONDS = toPositiveInt(
-  process.env.TWILIO_TURN_TTL_SECONDS,
-  86_400
-);
+const DEFAULT_FALLBACK_ICE_SERVERS = [
+  { urls: "stun:global.stun.twilio.com:3478" },
+  { urls: "stun:stun.l.google.com:19302" },
+  { urls: "stun:stun1.l.google.com:19302" },
+];
 
-const TWILIO_TOKEN_ENDPOINT = `https://api.twilio.com/2010-04-01/Accounts/${TWILIO_ACCOUNT_SID}/Tokens.json`;
+const getTwilioConfig = () => {
+  const accountSid = String(process.env.TWILIO_ACCOUNT_SID || "").trim();
+  const authToken = String(process.env.TWILIO_AUTH_TOKEN || "").trim();
+  const ttlSeconds = toPositiveInt(process.env.TWILIO_TURN_TTL_SECONDS, 86_400);
+  const tokenEndpoint = `https://api.twilio.com/2010-04-01/Accounts/${accountSid}/Tokens.json`;
+
+  return {
+    accountSid,
+    authToken,
+    ttlSeconds,
+    tokenEndpoint,
+  };
+};
 
 export const hasTwilioTurnConfig = () =>
-  Boolean(TWILIO_ACCOUNT_SID && TWILIO_AUTH_TOKEN);
+  Boolean(getTwilioConfig().accountSid && getTwilioConfig().authToken);
 
-const toBasicAuthHeader = () =>
-  `Basic ${Buffer.from(`${TWILIO_ACCOUNT_SID}:${TWILIO_AUTH_TOKEN}`).toString(
+export const getFallbackIceServers = () =>
+  DEFAULT_FALLBACK_ICE_SERVERS.map((entry) => ({ ...entry }));
+
+const toBasicAuthHeader = ({ accountSid, authToken }) =>
+  `Basic ${Buffer.from(`${accountSid}:${authToken}`).toString(
     "base64"
   )}`;
 
@@ -36,23 +50,22 @@ const toIceServer = (entry) => {
   };
 };
 
-const fallbackIceServers = [{ urls: "stun:global.stun.twilio.com:3478" }];
-
 export const fetchTwilioIceServers = async () => {
-  if (!hasTwilioTurnConfig()) {
+  const { accountSid, authToken, ttlSeconds, tokenEndpoint } = getTwilioConfig();
+  if (!accountSid || !authToken) {
     throw new Error(
       "Twilio TURN is not configured. Missing TWILIO_ACCOUNT_SID or TWILIO_AUTH_TOKEN."
     );
   }
 
   const body = new URLSearchParams({
-    Ttl: String(TWILIO_TURN_TTL_SECONDS),
+    Ttl: String(ttlSeconds),
   });
 
-  const response = await fetch(TWILIO_TOKEN_ENDPOINT, {
+  const response = await fetch(tokenEndpoint, {
     method: "POST",
     headers: {
-      Authorization: toBasicAuthHeader(),
+      Authorization: toBasicAuthHeader({ accountSid, authToken }),
       "Content-Type": "application/x-www-form-urlencoded",
     },
     body,
@@ -79,7 +92,7 @@ export const fetchTwilioIceServers = async () => {
   }
 
   return {
-    ttlSeconds: TWILIO_TURN_TTL_SECONDS,
-    iceServers: [...fallbackIceServers, ...normalizedServers],
+    ttlSeconds,
+    iceServers: [...getFallbackIceServers(), ...normalizedServers],
   };
 };

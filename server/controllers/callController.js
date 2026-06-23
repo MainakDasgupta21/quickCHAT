@@ -2,7 +2,11 @@ import {
   getCallTelemetrySnapshot,
   isCallsFeatureEnabled,
 } from "../lib/callSignaling.js";
-import { fetchTwilioIceServers, hasTwilioTurnConfig } from "../lib/twilioTurn.js";
+import {
+  fetchTwilioIceServers,
+  getFallbackIceServers,
+  hasTwilioTurnConfig,
+} from "../lib/twilioTurn.js";
 
 export const getIceServers = async (_req, res) => {
   try {
@@ -15,26 +19,39 @@ export const getIceServers = async (_req, res) => {
     }
 
     if (!hasTwilioTurnConfig()) {
-      return res.status(503).json({
-        success: false,
+      return res.json({
+        success: true,
+        degraded: true,
+        provider: "fallback-stun",
         message:
-          "Calling setup is unavailable right now. Twilio TURN is not configured.",
-        code: "TWILIO_TURN_NOT_CONFIGURED",
+          "Twilio TURN is not configured. Using STUN fallback for best-effort calling.",
+        iceServers: getFallbackIceServers(),
+        ttlSeconds: 600,
       });
     }
 
     const { iceServers, ttlSeconds } = await fetchTwilioIceServers();
     return res.json({
       success: true,
+      degraded: false,
+      provider: "twilio-turn",
       iceServers,
       ttlSeconds,
     });
   } catch (error) {
     console.log(error.message);
-    return res.status(502).json({
-      success: false,
-      message: "Failed to fetch call ICE servers.",
-      code: "ICE_SERVER_FETCH_FAILED",
+
+    // Fallback path keeps calls usable if TURN token retrieval is temporarily
+    // unavailable (network/transient provider issues). NAT-heavy networks may
+    // still require TURN for optimal reliability.
+    return res.json({
+      success: true,
+      degraded: true,
+      provider: "fallback-stun",
+      message:
+        "TURN lookup failed. Using STUN fallback for best-effort calling.",
+      iceServers: getFallbackIceServers(),
+      ttlSeconds: 300,
     });
   }
 };
