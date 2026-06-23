@@ -51,7 +51,7 @@ const Sidebar = ({
   } = useContext(AuthContext);
 
   const navigate = useNavigate();
-  const { isRtl, locale, setLocale, t } = useLocale();
+  const { isRtl, t } = useLocale();
   const [input, setInput] = useState("");
   const [menuOpen, setMenuOpen] = useState(false);
   const [isCreateGroupOpen, setIsCreateGroupOpen] = useState(false);
@@ -454,20 +454,6 @@ const Sidebar = ({
                   </span>
                   <span className="text-xs text-white/60">
                     {notificationPermission}
-                  </span>
-                </button>
-                <button
-                  type="button"
-                  role="menuitem"
-                  onClick={() => setLocale(locale === "ar" ? "en" : "ar")}
-                  className="w-full text-start px-3 py-2 rounded-lg text-sm hover:bg-white/10 flex items-center justify-between gap-2"
-                >
-                  <span className="flex items-center gap-2">
-                    <span className="h-2 w-2 rounded-full bg-brand-300" />
-                    {t("language.label")}
-                  </span>
-                  <span className="text-xs text-white/60">
-                    {locale === "ar" ? t("language.arabic") : t("language.english")}
                   </span>
                 </button>
                 <button

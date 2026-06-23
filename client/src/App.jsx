@@ -22,7 +22,7 @@ export const App = () => {
   }
 
   return (
-    <div className="app-shell relative min-h-screen overflow-hidden">
+    <div className="app-shell relative h-dvh overflow-hidden flex flex-col">
       <div className="app-ambient absolute inset-0 -z-20" />
       <div className="app-texture absolute inset-0 -z-10 bg-[url('/bgImage.svg')] bg-cover bg-center" />
       {authUser && connectionStatus !== "connected" && (
@@ -30,7 +30,7 @@ export const App = () => {
           role="status"
           aria-live="polite"
           aria-atomic="true"
-          className="absolute top-0 left-0 right-0 z-50 px-4 py-2 text-center text-xs font-medium border-b border-amber-300/20 bg-amber-300/14 text-amber-100 backdrop-blur-md"
+          className="relative z-50 shrink-0 px-4 py-2 text-center text-xs font-medium border-b border-amber-300/20 bg-amber-300/14 text-amber-100 backdrop-blur-md"
         >
           {connectionStatus === "connecting"
             ? t("app.connectingRealtime")
@@ -70,23 +70,25 @@ export const App = () => {
           },
         }}
       />
-      <Suspense fallback={<AppSplash />}>
-        <Routes>
-          <Route
-            path="/"
-            element={authUser ? <HomePage /> : <Navigate to="/login" replace />}
-          />
-          <Route
-            path="/login"
-            element={!authUser ? <LoginPage /> : <Navigate to="/" replace />}
-          />
-          <Route
-            path="/profile"
-            element={authUser ? <ProfilePage /> : <Navigate to="/login" replace />}
-          />
-          <Route path="*" element={<Navigate to="/" replace />} />
-        </Routes>
-      </Suspense>
+      <div className="relative flex-1 min-h-0">
+        <Suspense fallback={<AppSplash />}>
+          <Routes>
+            <Route
+              path="/"
+              element={authUser ? <HomePage /> : <Navigate to="/login" replace />}
+            />
+            <Route
+              path="/login"
+              element={!authUser ? <LoginPage /> : <Navigate to="/" replace />}
+            />
+            <Route
+              path="/profile"
+              element={authUser ? <ProfilePage /> : <Navigate to="/login" replace />}
+            />
+            <Route path="*" element={<Navigate to="/" replace />} />
+          </Routes>
+        </Suspense>
+      </div>
     </div>
   );
 };

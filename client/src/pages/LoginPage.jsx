@@ -20,7 +20,7 @@ const LoginPage = () => {
   const [twoFactorToken, setTwoFactorToken] = useState("");
   const [isSubmitting, setIsSubmitting] = useState(false);
   const { login, verifyTwoFactorLogin } = useContext(AuthContext);
-  const { isRtl, locale, setLocale, t } = useLocale();
+  const { isRtl, t } = useLocale();
 
   const resetTwoFactorStep = () => {
     setRequiresTwoFactor(false);
@@ -71,18 +71,9 @@ const LoginPage = () => {
   };
 
   return (
-    <div className="min-h-screen px-4 py-6 sm:px-6 lg:px-10 flex items-center justify-center">
-      <div className="relative w-full max-w-5xl grid lg:grid-cols-[1.1fr_1fr] gap-5 lg:gap-6 animate-fade-in">
-        <div className="absolute top-2 end-2 z-20">
-          <button
-            type="button"
-            onClick={() => setLocale(locale === "ar" ? "en" : "ar")}
-            className="rounded-xl border border-white/18 bg-white/8 px-3 py-2 text-xs text-white/80 hover:bg-white/12"
-          >
-            {locale === "ar" ? t("language.arabic") : t("language.english")}
-          </button>
-        </div>
-        <div className="hidden lg:flex glass-panel rounded-3xl p-8 flex-col justify-between min-h-[620px]">
+    <div className="w-full h-full overflow-y-auto animate-fade-in">
+      <div className="w-full min-h-full grid grid-cols-1 lg:grid-cols-2">
+        <div className="hidden lg:flex h-full min-h-0 px-10 xl:px-14 py-12 flex-col justify-between border-r border-white/10 bg-[linear-gradient(180deg,rgba(132,123,194,0.16),rgba(20,18,33,0.82))]">
           <div>
             <img src={assets.logo_big} alt="" className="w-52" />
             <h1 className="mt-10 text-4xl font-semibold leading-tight text-white">
@@ -96,10 +87,11 @@ const LoginPage = () => {
           </div>
         </div>
 
-        <form
-          onSubmit={onSubmitHandler}
-          className="glass-panel rounded-3xl p-6 sm:p-7 lg:p-8 flex flex-col gap-5 min-h-[620px] animate-slide-up"
-        >
+        <div className="flex min-h-full items-center justify-center px-4 py-6 sm:px-8 lg:px-10">
+          <form
+            onSubmit={onSubmitHandler}
+            className="glass-panel w-full max-w-md rounded-3xl p-6 sm:p-7 lg:p-8 flex flex-col gap-5 animate-slide-up"
+          >
           <div className="lg:hidden flex items-center gap-3">
             <img src={assets.logo} alt="quickchat logo" className="h-9" />
             <div>
@@ -378,7 +370,8 @@ const LoginPage = () => {
               </p>
             )}
           </div>
-        </form>
+          </form>
+        </div>
       </div>
     </div>
   );

@@ -132,8 +132,8 @@ const ProfilePage = () => {
   };
 
   return (
-    <div className="min-h-screen px-4 py-6 sm:px-6 lg:px-10 flex items-center justify-center animate-fade-in">
-      <div className="w-full max-w-4xl glass-panel rounded-3xl p-5 sm:p-7 lg:p-8 text-gray-200 animate-slide-up">
+    <div className="min-h-full w-full overflow-y-auto px-4 py-6 sm:px-6 lg:px-10 animate-fade-in">
+      <div className="w-full max-w-6xl mx-auto glass-panel rounded-3xl p-5 sm:p-7 lg:p-8 text-gray-200 animate-slide-up">
         <div className="flex items-center justify-between gap-3 mb-6">
           <div>
             <h2 className="text-2xl font-semibold text-white">Profile details</h2>
