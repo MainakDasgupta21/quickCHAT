@@ -536,7 +536,7 @@ const ChatContainer = ({
   };
 
   const scrollToBottom = useCallback(
-    (behavior = "smooth") => {
+    (behavior = "auto") => {
       if (!messages.length) return;
       virtuosoRef.current?.scrollToIndex({
         index: messages.length - 1,
@@ -720,7 +720,7 @@ const ChatContainer = ({
     setOpenTouchActionsMessageId("");
     setPendingBelowCount(0);
     setIsNearBottom(true);
-    scrollToBottom();
+    scrollToBottom("smooth");
 
     if (typingRef.current && selectedConversation) {
       emitStopTyping(selectedConversation);
@@ -836,6 +836,11 @@ const ChatContainer = ({
     });
     return indexById;
   }, [messages]);
+  const tailMessageKey = useMemo(() => {
+    if (!messages.length) return "";
+    const tailMessage = messages[messages.length - 1];
+    return String(tailMessage?._id || tailMessage?.clientId || "");
+  }, [messages]);
 
   useEffect(() => {
     messageIndexByIdRef.current = messageIndexById;
@@ -916,17 +921,15 @@ const ChatContainer = ({
   ]);
 
   useEffect(() => {
-    if (!selectedConversation) return;
-
-    if (isNearBottom) {
-      scrollToBottom();
-    }
+    if (!selectedConversationId || !isNearBottom) return;
+    // Keep the viewport pinned without animation to avoid near-bottom bounce loops.
+    scrollToBottom("auto");
   }, [
-    messages,
     isNearBottom,
     isSelectedConversationTyping,
+    selectedConversationId,
+    tailMessageKey,
     scrollToBottom,
-    selectedConversation,
   ]);
 
   useEffect(() => {
@@ -1244,9 +1247,11 @@ const ChatContainer = ({
 
   const handleAtBottomStateChange = useCallback((atBottom) => {
     const nearBottom = Boolean(atBottom);
-    setIsNearBottom(nearBottom);
+    setIsNearBottom((previousNearBottom) =>
+      previousNearBottom === nearBottom ? previousNearBottom : nearBottom
+    );
     if (nearBottom) {
-      setPendingBelowCount(0);
+      setPendingBelowCount((previousCount) => (previousCount === 0 ? previousCount : 0));
     }
   }, []);
 
@@ -1535,8 +1540,9 @@ const ChatContainer = ({
         <button
           type="button"
           onClick={() => {
-            scrollToBottom();
+            setIsNearBottom(true);
             setPendingBelowCount(0);
+            scrollToBottom("smooth");
           }}
           className={`absolute bottom-[calc(7rem+env(safe-area-inset-bottom))] z-30 px-3 py-2 rounded-full btn-gradient text-xs font-medium shadow-soft ${
             isRtl ? "left-4 sm:left-6" : "right-4 sm:right-6"
