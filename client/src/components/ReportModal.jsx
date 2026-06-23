@@ -106,7 +106,7 @@ const ReportModal = ({
     >
       <div
         ref={dialogRef}
-        className="w-full max-w-xl rounded-3xl border border-white/14 bg-[linear-gradient(180deg,rgba(29,25,48,0.98),rgba(13,12,21,0.98))] shadow-soft overflow-hidden animate-slide-up"
+        className="w-full max-w-xl max-h-[92dvh] overflow-y-auto rounded-3xl border border-white/14 bg-[linear-gradient(180deg,rgba(29,25,48,0.98),rgba(13,12,21,0.98))] shadow-soft animate-slide-up"
       >
         <div className="px-5 py-4 border-b border-white/10 flex items-center justify-between gap-3">
           <div>

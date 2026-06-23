@@ -22,6 +22,8 @@ const CreateGroupModal = ({
   initialGroupName = "",
   initialSelectedIds = EMPTY_ID_LIST,
   excludedUserIds = EMPTY_ID_LIST,
+  isLoadingContacts = false,
+  onRefreshContacts = null,
   isSubmitting = false,
 }) => {
   const [groupName, setGroupName] = useState(initialGroupName);
@@ -49,6 +51,21 @@ const CreateGroupModal = ({
     setSelectedIds(new Set(normalizedInitialSelectedIds));
   }, [initialGroupName, isOpen, normalizedInitialSelectedIds]);
 
+  useEffect(() => {
+    if (!isOpen) return undefined;
+
+    const handleEscape = (event) => {
+      if (event.key === "Escape" && !isSubmitting) {
+        onClose?.();
+      }
+    };
+
+    document.addEventListener("keydown", handleEscape);
+    return () => {
+      document.removeEventListener("keydown", handleEscape);
+    };
+  }, [isOpen, isSubmitting, onClose]);
+
   const excludedIdsSet = useMemo(
     () => new Set(normalizeIdList(excludedUserIds)),
     [excludedUserIds]
@@ -68,6 +85,9 @@ const CreateGroupModal = ({
   }, [contacts, excludedIdsSet, query]);
 
   const selectedCount = selectedIds.size;
+  const hasSearchQuery = query.trim().length > 0;
+  const canRetryContactLoad =
+    !hasSearchQuery && typeof onRefreshContacts === "function" && !isLoadingContacts;
 
   const toggleSelection = (userId) => {
     const normalizedUserId = toNormalizedId(userId);
@@ -116,7 +136,7 @@ const CreateGroupModal = ({
         }
       }}
     >
-      <div className="w-full max-w-lg rounded-3xl border border-white/16 bg-[linear-gradient(180deg,rgba(31,27,50,0.98),rgba(15,13,24,0.98))] shadow-soft overflow-hidden">
+      <div className="w-full max-w-lg max-h-[92dvh] overflow-y-auto rounded-3xl border border-white/16 bg-[linear-gradient(180deg,rgba(31,27,50,0.98),rgba(15,13,24,0.98))] shadow-soft">
         <form onSubmit={handleSubmit}>
           <div className="px-5 py-4 border-b border-white/10 flex items-center justify-between gap-3">
             <h3 className="text-base font-semibold text-white">{resolvedTitle}</h3>
@@ -158,13 +178,32 @@ const CreateGroupModal = ({
             </label>
 
             <div className="max-h-64 overflow-y-auto space-y-1 rounded-xl border border-white/12 bg-white/[0.03] p-2">
-              {filteredContacts.length === 0 && (
+              {isLoadingContacts ? (
                 <p className="text-xs text-white/55 text-center py-5">
-                  {t("createGroupModal.noContactsFound")}
+                  {t("loginPage.pleaseWait")}
                 </p>
-              )}
-
-              {filteredContacts.map((contact) => {
+              ) : filteredContacts.length === 0 ? (
+                <div className="text-center py-5 space-y-2">
+                  <p className="text-xs text-white/55">
+                    {hasSearchQuery
+                      ? t("createGroupModal.noContactsFound")
+                      : t("sidebar.noContactsAvailable")}
+                  </p>
+                  {canRetryContactLoad && (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        void onRefreshContacts();
+                      }}
+                      disabled={isSubmitting}
+                      className="text-xs rounded-lg border border-white/18 bg-white/7 px-2.5 py-1.5 text-white/80 hover:bg-white/12 disabled:opacity-45 disabled:cursor-not-allowed"
+                    >
+                      {t("common.retry")}
+                    </button>
+                  )}
+                </div>
+              ) : (
+                filteredContacts.map((contact) => {
                 const contactId = toNormalizedId(contact._id);
                 const isSelected = selectedIds.has(contactId);
                 return (
@@ -198,7 +237,8 @@ const CreateGroupModal = ({
                     />
                   </button>
                 );
-              })}
+                })
+              )}
             </div>
           </div>
 
@@ -216,6 +256,7 @@ const CreateGroupModal = ({
               type="submit"
               disabled={
                 isSubmitting ||
+                isLoadingContacts ||
                 selectedCount === 0 ||
                 (showGroupName && !groupName.trim())
               }

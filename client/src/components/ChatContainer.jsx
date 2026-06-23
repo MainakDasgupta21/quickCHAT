@@ -1337,7 +1337,7 @@ const ChatContainer = ({
   return selectedConversation ? (
     <div className="h-full min-h-0 flex flex-col bg-[linear-gradient(180deg,rgba(20,17,32,0.32),rgba(15,13,24,0.82))] relative">
       <div className="shrink-0 z-30 px-4 py-3 border-b border-white/10 glass-subtle">
-        <div className="flex items-center gap-3">
+        <div className="chat-column flex items-center gap-3">
           <div className="relative">
             <img
               src={selectedConversationAvatar || assets.avatar_icon}
@@ -1404,14 +1404,14 @@ const ChatContainer = ({
           <button
             type="button"
             onClick={() => setIsMobileDetailsOpen(true)}
-            className="md:hidden icon-btn h-9 w-9"
+            className="xl:hidden icon-btn h-9 w-9"
             aria-label={t("chatContainer.openConversationDetailsAria")}
           >
             <img src={assets.help_icon} alt="" className="w-4" />
           </button>
         </div>
         {showSearch && (
-          <div className="mt-3 flex items-center gap-2 animate-fade-in">
+          <div className="chat-column mt-3 flex items-center gap-2 animate-fade-in">
             <input
               value={searchQuery}
               onChange={(event) => setSearchQuery(event.target.value)}
@@ -1471,7 +1471,7 @@ const ChatContainer = ({
         )}
       </div>
 
-      <div className="flex-1 min-h-0 px-4 py-4">
+      <div className="chat-column flex-1 min-h-0 px-4 py-4">
         {messagesLoading && (
           <div className="space-y-3 pt-3">
             {Array.from({ length: 7 }).map((_, index) => (
@@ -1559,6 +1559,7 @@ const ChatContainer = ({
       )}
 
       <div className="shrink-0 z-40 px-4 pb-4 pt-3 border-t border-white/10 bg-[linear-gradient(180deg,rgba(13,12,20,0.1),rgba(12,10,18,0.92))] backdrop-blur-xl">
+        <div className="chat-column">
         {(replyTo || editingMessageId) && (
           <div className="mb-2.5 rounded-xl px-3 py-2 bg-white/8 border border-white/14 flex items-center justify-between gap-2">
             <div className="min-w-0">
@@ -1789,7 +1790,7 @@ const ChatContainer = ({
           >
             <label
               htmlFor="image"
-              className={`shrink-0 ${
+              className={`shrink-0 inline-flex items-center self-stretch ${
                 isDirectConversationBlocked ? "cursor-not-allowed opacity-40" : "cursor-pointer"
               }`}
               aria-label={t("chatContainer.uploadImageLabel")}
@@ -1810,7 +1811,7 @@ const ChatContainer = ({
             />
             <label
               htmlFor="file-attachment"
-              className={`shrink-0 text-white/70 text-sm ${
+              className={`shrink-0 inline-flex items-center self-stretch text-white/70 text-sm ${
                 isDirectConversationBlocked ? "cursor-not-allowed opacity-40" : "cursor-pointer"
               } ${isRtl ? "mr-2" : "ml-2"}`}
               aria-label={t("chatContainer.uploadFileLabel")}
@@ -1843,7 +1844,7 @@ const ChatContainer = ({
                 })
               }
               disabled={isDirectConversationBlocked}
-              className={`shrink-0 text-white/75 hover:text-white disabled:opacity-40 disabled:cursor-not-allowed ${
+              className={`shrink-0 inline-flex items-center self-stretch text-white/75 hover:text-white disabled:opacity-40 disabled:cursor-not-allowed ${
                 isRtl ? "mr-2" : "ml-2"
               }`}
               aria-label={t("chatContainer.openEmojiPickerAria")}
@@ -1861,7 +1862,7 @@ const ChatContainer = ({
                 setOpenReactionPickerId(null);
               }}
               disabled={Boolean(editingMessageId) || isDirectConversationBlocked}
-              className={`shrink-0 text-sm ${
+              className={`shrink-0 inline-flex items-center self-stretch text-sm ${
                 isSchedulePanelOpen || scheduledSendAtInput || disappearAfterMsInput
                   ? "text-amber-100"
                   : "text-white/75 hover:text-white"
@@ -1881,7 +1882,7 @@ const ChatContainer = ({
                 }
               }}
               disabled={isDirectConversationBlocked && !isRecording}
-              className={`shrink-0 text-sm ${
+              className={`shrink-0 inline-flex items-center self-stretch text-sm ${
                 isRecording ? "text-rose-300" : "text-white/75 hover:text-white"
               } ${isRtl ? "mr-2" : "ml-2"} disabled:opacity-40 disabled:cursor-not-allowed`}
               aria-label={
@@ -2030,6 +2031,7 @@ const ChatContainer = ({
           >
             <img src={assets.send_button} alt="" className="w-5" />
           </button>
+        </div>
         </div>
       </div>
 

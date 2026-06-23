@@ -243,7 +243,7 @@ const MessageRow = React.memo(function MessageRow({
         }`}
       >
         <div
-          className={`max-w-[78%] flex flex-col ${
+          className={`max-w-[85%] sm:max-w-[80%] lg:max-w-[72%] 2xl:max-w-[68%] flex flex-col ${
             isOwn ? "items-end" : "items-start"
           }`}
         >

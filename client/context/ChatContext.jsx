@@ -706,6 +706,9 @@ export const ChatProvider = ({ children }) => {
     } catch {
       try {
         const { data } = await axios.get("/api/messages/users");
+        if (!data.success) {
+          throw new Error(data.message || t("chat.loadContactsFailed"));
+        }
         const normalizedContacts = Array.isArray(data.users)
           ? data.users.map((contact) => normalizeContact(contact)).filter((contact) => contact._id)
           : [];
@@ -797,7 +800,10 @@ export const ChatProvider = ({ children }) => {
         }
 
         const normalizedConversation = normalizeConversation(data.conversation);
-        if (!normalizedConversation) return null;
+        if (!normalizedConversation) {
+          toast.error(t("chat.openConversationFailed"));
+          return null;
+        }
         upsertConversation(normalizedConversation);
         setSelectedConversation(normalizedConversation);
         setUnseenMessages((previousUnseenMessages) => ({
@@ -1300,9 +1306,17 @@ export const ChatProvider = ({ children }) => {
         }
 
         const normalizedConversation = normalizeConversation(data.conversation);
-        if (normalizedConversation) {
-          upsertConversation(normalizedConversation);
+        if (!normalizedConversation) {
+          toast.error(t("chat.updateConversationPreferencesFailed"));
+          return null;
         }
+
+        upsertConversation(normalizedConversation);
+        setSelectedConversation((previousConversation) =>
+          toNormalizedId(previousConversation?._id) === normalizedConversation._id
+            ? normalizedConversation
+            : previousConversation
+        );
         return normalizedConversation;
       } catch (error) {
         toast.error(getLocalizedError(error, "chat.updateConversationPreferencesFailed"));
@@ -1838,7 +1852,10 @@ export const ChatProvider = ({ children }) => {
         }
 
         const normalizedConversation = normalizeConversation(data.conversation);
-        if (!normalizedConversation) return null;
+        if (!normalizedConversation) {
+          toast.error(t("chat.createGroupFailed"));
+          return null;
+        }
 
         upsertConversation(normalizedConversation);
         setSelectedConversation(normalizedConversation);

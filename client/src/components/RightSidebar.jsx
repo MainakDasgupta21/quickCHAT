@@ -361,7 +361,7 @@ const RightSidebar = ({
         </div>
 
         {sharedImages.length > 0 ? (
-          <div className="grid grid-cols-2 gap-3">
+          <div className="grid grid-cols-2 2xl:grid-cols-3 gap-3">
             {sharedImages.map((item, index) => (
               <button
                 type="button"
@@ -406,7 +406,7 @@ const RightSidebar = ({
   return (
     <>
       <div
-        className={`hidden md:block w-full h-full text-white border-white/10 ${
+        className={`hidden xl:block w-full h-full text-white border-white/10 ${
           isRtl ? "border-r" : "border-l"
         } bg-[linear-gradient(180deg,rgba(129,133,178,0.12),rgba(15,13,24,0.8))] overflow-y-auto`}
       >
@@ -415,7 +415,7 @@ const RightSidebar = ({
 
       {mobileSheetOpen && (
         <div
-          className="fixed inset-0 z-50 md:hidden bg-black/55 backdrop-blur-[2px]"
+          className="fixed inset-0 z-50 xl:hidden bg-black/55 backdrop-blur-[2px]"
           role="dialog"
           aria-modal="true"
           aria-label={t("rightSidebar.conversationDetails")}

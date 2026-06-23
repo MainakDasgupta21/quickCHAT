@@ -211,6 +211,26 @@ body,
 
 html {
   scroll-behavior: smooth;
+  /* Prevent iOS/Safari from auto-inflating text on orientation change. */
+  -webkit-text-size-adjust: 100%;
+  text-size-adjust: 100%;
+}
+
+/* Responsive media safety net: nothing should ever force horizontal scroll
+   by exceeding its container, regardless of intrinsic dimensions. */
+img,
+svg,
+video,
+canvas {
+  max-width: 100%;
+}
+
+/* Remove the grey flash on tap for touch devices for a more native feel. */
+button,
+[role="button"],
+a,
+label {
+  -webkit-tap-highlight-color: transparent;
 }
 
 body {
@@ -529,6 +549,16 @@ body {
   .stagger-item {
     animation: var(--animate-stagger-in);
   }
+
+  /* Keeps the conversation (header row, messages, composer) in a readable,
+     centered band on ultra-wide / 4K / 5K displays instead of stretching
+     bubbles across the full width of a 2000px+ chat column. On normal and
+     smaller screens the column is narrower than the cap, so this is a no-op. */
+  .chat-column {
+    width: 100%;
+    max-width: 64rem;
+    margin-inline: auto;
+  }
 }
 
 @media (prefers-reduced-motion: reduce) {
@@ -542,5 +572,17 @@ body {
     animation-duration: 1ms !important;
     animation-iteration-count: 1 !important;
     transition-duration: 1ms !important;
+  }
+}
+
+/* On touch devices, iOS Safari zooms the viewport when focusing an input whose
+   font-size is below 16px (the dense composer, search, and code fields all use
+   14px/12px). Pinning interactive controls to 16px on coarse pointers keeps the
+   layout stable on focus without disabling user zoom (which would hurt a11y). */
+@media (pointer: coarse) {
+  input,
+  textarea,
+  select {
+    font-size: 16px;
   }
 }

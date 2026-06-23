@@ -43,8 +43,8 @@ const HomePage = () => {
       <div
         className={`w-full h-full overflow-hidden grid grid-cols-1 relative transition-all duration-300 ${
           selectedConversation
-            ? "md:grid-cols-[300px_minmax(0,1fr)_320px] 2xl:grid-cols-[340px_minmax(0,1fr)_360px]"
-            : "md:grid-cols-[360px_minmax(0,1fr)]"
+            ? "md:grid-cols-[clamp(240px,30vw,300px)_minmax(0,1fr)] lg:grid-cols-[clamp(280px,26vw,320px)_minmax(0,1fr)] xl:grid-cols-[clamp(280px,22vw,320px)_minmax(0,1fr)_clamp(300px,24vw,340px)] 2xl:grid-cols-[360px_minmax(0,1fr)_380px]"
+            : "md:grid-cols-[clamp(280px,34vw,340px)_minmax(0,1fr)] lg:grid-cols-[clamp(320px,30vw,380px)_minmax(0,1fr)]"
         }`}
       >
         <Sidebar

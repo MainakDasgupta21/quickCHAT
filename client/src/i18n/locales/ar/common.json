@@ -323,6 +323,7 @@
     "notificationsEnabled": "تم تفعيل الإشعارات",
     "browserNotificationsEnabled": "تم تفعيل إشعارات المتصفح",
     "notificationPermissionDenied": "تم رفض إذن الإشعارات",
+    "notificationPermissionDismissed": "تم إغلاق نافذة إذن الإشعارات.",
     "offlinePushEnableFailed": "تعذر تفعيل إشعارات الدفع أثناء عدم الاتصال.",
     "loginSuccess": "تم تسجيل الدخول بنجاح",
     "loginFailed": "تعذر تسجيل الدخول",

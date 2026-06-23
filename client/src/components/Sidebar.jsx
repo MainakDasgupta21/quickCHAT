@@ -41,6 +41,7 @@ const Sidebar = ({
   const {
     authUser,
     logout,
+    isLoggingOut = false,
     onlineUsers,
     soundEnabled,
     theme = "dark",
@@ -61,6 +62,8 @@ const Sidebar = ({
   const [openingContactId, setOpeningContactId] = useState("");
   const [isLoadingContacts, setIsLoadingContacts] = useState(false);
   const [showArchivedConversations, setShowArchivedConversations] = useState(false);
+  const [isArchiving, setIsArchiving] = useState(false);
+  const [isRequestingNotifications, setIsRequestingNotifications] = useState(false);
   const menuRef = useRef(null);
   const searchInputRef = useRef(null);
   const menuTriggerRef = useRef(null);
@@ -167,15 +170,18 @@ const Sidebar = ({
     };
   }, [getContacts]);
 
-  const ensureContactsLoaded = useCallback(async () => {
-    if (contacts.length) return;
+  const ensureContactsLoaded = useCallback(async ({ force = false } = {}) => {
+    if (!force && contacts.length) {
+      return contacts;
+    }
     setIsLoadingContacts(true);
     try {
-      await getContacts();
+      const loadedContacts = await getContacts();
+      return Array.isArray(loadedContacts) ? loadedContacts : [];
     } finally {
       setIsLoadingContacts(false);
     }
-  }, [contacts.length, getContacts]);
+  }, [contacts, getContacts]);
 
   useEffect(() => {
     if (!menuOpen) return;
@@ -234,44 +240,56 @@ const Sidebar = ({
     }
   }, [menuOpen]);
 
-  const openCreateGroupModal = async () => {
+  const openCreateGroupModal = () => {
     setMenuOpen(false);
     setIsCreateGroupOpen(true);
     setIsNewChatOpen(false);
-    await ensureContactsLoaded();
+    void ensureContactsLoaded();
   };
 
-  const openNewChatModal = async () => {
+  const openNewChatModal = () => {
     setMenuOpen(false);
     setIsCreateGroupOpen(false);
     setIsNewChatOpen(true);
-    await ensureContactsLoaded();
+    void ensureContactsLoaded();
   };
 
   const handleCreateGroup = async ({ name, participantIds }) => {
+    if (isCreatingGroup) return false;
     setIsCreatingGroup(true);
-    const createdConversation = await createGroupConversation({
-      name,
-      participantIds,
-    });
-    if (createdConversation) {
+    try {
+      const createdConversation = await createGroupConversation({
+        name,
+        participantIds,
+      });
+      if (!createdConversation) {
+        return false;
+      }
       setIsCreateGroupOpen(false);
       toast.success(t("sidebar.groupCreated"));
+      return true;
+    } finally {
+      setIsCreatingGroup(false);
     }
-    setIsCreatingGroup(false);
   };
 
   const handleCreateDirectChat = async ({ participantIds }) => {
     const targetUserId = toNormalizedId(participantIds?.[0]);
     if (!targetUserId) return;
 
+    if (isOpeningDirectChat) return false;
     setIsOpeningDirectChat(true);
-    const openedConversation = await createOrOpenDirectConversation(targetUserId);
-    if (openedConversation) {
+    try {
+      const openedConversation = await createOrOpenDirectConversation(targetUserId);
+      if (!openedConversation) {
+        return false;
+      }
       setIsNewChatOpen(false);
       toast.success(t("sidebar.chatOpened"));
+      return true;
+    } finally {
+      setIsOpeningDirectChat(false);
     }
-    setIsOpeningDirectChat(false);
   };
 
   const handleStartContactChat = async (contactId) => {
@@ -298,17 +316,76 @@ const Sidebar = ({
   };
 
   const toggleSelectedConversationArchive = async () => {
+    if (isArchiving) return;
     const selectedConversationId = toNormalizedId(selectedConversation?._id);
     if (!selectedConversationId) return;
-    await updateConversationPreferences(selectedConversationId, {
-      isArchived: !selectedConversation?.isArchived,
-    });
+    const nextArchivedState = !isConversationArchived(selectedConversation);
+
+    setIsArchiving(true);
+    try {
+      const updatedConversation = await updateConversationPreferences(
+        selectedConversationId,
+        {
+          isArchived: nextArchivedState,
+        }
+      );
+      if (!updatedConversation) return;
+
+      const updatedConversationId =
+        toNormalizedId(updatedConversation._id) || selectedConversationId;
+      const selectedConversationStillMatches =
+        toNormalizedId(selectedConversation?._id) === updatedConversationId;
+      const shouldClearSelection = nextArchivedState !== Boolean(showArchivedConversations);
+
+      if (selectedConversationStillMatches) {
+        if (shouldClearSelection) {
+          setSelectedConversation(null);
+        } else {
+          setSelectedConversation(updatedConversation);
+        }
+      }
+
+      setMenuOpen(false);
+    } finally {
+      setIsArchiving(false);
+    }
+  };
+
+  const handleToggleTheme = () => {
+    toggleTheme();
     setMenuOpen(false);
+  };
+
+  const handleToggleSound = () => {
+    toggleSound();
+    setMenuOpen(false);
+  };
+
+  const handleRequestNotifications = async () => {
+    if (isRequestingNotifications || notificationPermission === "unsupported") return;
+    setIsRequestingNotifications(true);
+    try {
+      await requestNotificationPermission();
+      setMenuOpen(false);
+    } finally {
+      setIsRequestingNotifications(false);
+    }
+  };
+
+  const handleLogout = async () => {
+    if (isLoggingOut) return;
+    setMenuOpen(false);
+    await logout();
   };
 
   const hasSearchQuery = input.trim().length > 0;
   const hasConversationResults = filteredConversations.length > 0;
   const hasContactResults = filteredContacts.length > 0;
+  const isSelectedConversationArchived = isConversationArchived(selectedConversation);
+  const notificationStatusLabel =
+    notificationPermission === "granted" ? t("common.on") : t("common.off");
+  const isNotificationActionDisabled =
+    isRequestingNotifications || notificationPermission === "unsupported";
 
   return (
     <div
@@ -389,18 +466,20 @@ const Sidebar = ({
                   type="button"
                   role="menuitem"
                   onClick={toggleSelectedConversationArchive}
-                  disabled={!selectedConversation?._id}
+                  disabled={!selectedConversation?._id || isArchiving}
                   className="w-full text-start px-3 py-2 rounded-lg text-sm hover:bg-white/10 disabled:opacity-45 disabled:cursor-not-allowed flex items-center justify-between gap-2"
                 >
                   <span className="flex items-center gap-2">
                     <span className="h-2 w-2 rounded-full bg-brand-300" />
-                    {selectedConversation?.isArchived
+                    {isSelectedConversationArchived
                       ? t("sidebar.unarchiveChat")
                       : t("sidebar.archiveChat")}
                   </span>
-                  {!selectedConversation?._id && (
+                  {isArchiving ? (
+                    <span className="text-[10px] text-white/55">{t("loginPage.pleaseWait")}</span>
+                  ) : !selectedConversation?._id ? (
                     <span className="text-[10px] text-white/55">{t("common.selectChat")}</span>
-                  )}
+                  ) : null}
                 </button>
                 <button
                   type="button"
@@ -417,7 +496,7 @@ const Sidebar = ({
                 <button
                   type="button"
                   role="menuitem"
-                  onClick={() => toggleTheme()}
+                  onClick={handleToggleTheme}
                   className="w-full text-start px-3 py-2 rounded-lg text-sm hover:bg-white/10 flex items-center justify-between gap-2"
                 >
                   <span className="flex items-center gap-2">
@@ -431,7 +510,7 @@ const Sidebar = ({
                 <button
                   type="button"
                   role="menuitem"
-                  onClick={() => toggleSound()}
+                  onClick={handleToggleSound}
                   className="w-full text-start px-3 py-2 rounded-lg text-sm hover:bg-white/10 flex items-center justify-between gap-2"
                 >
                   <span className="flex items-center gap-2">
@@ -445,28 +524,27 @@ const Sidebar = ({
                 <button
                   type="button"
                   role="menuitem"
-                  onClick={() => requestNotificationPermission()}
-                  className="w-full text-start px-3 py-2 rounded-lg text-sm hover:bg-white/10 flex items-center justify-between gap-2"
+                  onClick={handleRequestNotifications}
+                  disabled={isNotificationActionDisabled}
+                  className="w-full text-start px-3 py-2 rounded-lg text-sm hover:bg-white/10 disabled:opacity-45 disabled:cursor-not-allowed flex items-center justify-between gap-2"
                 >
                   <span className="flex items-center gap-2">
                     <span className="h-2 w-2 rounded-full bg-brand-300" />
                     {t("sidebar.notifications")}
                   </span>
                   <span className="text-xs text-white/60">
-                    {notificationPermission}
+                    {isRequestingNotifications ? t("loginPage.pleaseWait") : notificationStatusLabel}
                   </span>
                 </button>
                 <button
                   type="button"
                   role="menuitem"
-                  onClick={() => {
-                    setMenuOpen(false);
-                    logout();
-                  }}
-                  className="w-full text-start px-3 py-2 rounded-lg text-sm hover:bg-white/10 text-rose-200 flex items-center gap-2"
+                  onClick={handleLogout}
+                  disabled={isLoggingOut}
+                  className="w-full text-start px-3 py-2 rounded-lg text-sm hover:bg-white/10 disabled:opacity-45 disabled:cursor-not-allowed text-rose-200 flex items-center gap-2"
                 >
                   <span className="h-2 w-2 rounded-full bg-rose-400" />
-                  {t("sidebar.logout")}
+                  {isLoggingOut ? t("loginPage.pleaseWait") : t("sidebar.logout")}
                 </button>
               </div>
             )}
@@ -750,10 +828,12 @@ const Sidebar = ({
         onClose={() => setIsNewChatOpen(false)}
         contacts={contacts}
         onSubmit={handleCreateDirectChat}
+        onRefreshContacts={() => ensureContactsLoaded({ force: true })}
         title={t("sidebar.newChat")}
         submitLabel={t("sidebar.startChat")}
         showGroupName={false}
         selectionMode="single"
+        isLoadingContacts={isLoadingContacts}
         isSubmitting={isOpeningDirectChat}
         excludedUserIds={[authUser?._id]}
       />
@@ -762,9 +842,11 @@ const Sidebar = ({
         onClose={() => setIsCreateGroupOpen(false)}
         contacts={contacts}
         onSubmit={handleCreateGroup}
+        onRefreshContacts={() => ensureContactsLoaded({ force: true })}
         title={t("sidebar.newGroup")}
         submitLabel={t("common.submit")}
         showGroupName
+        isLoadingContacts={isLoadingContacts}
         isSubmitting={isCreatingGroup}
         excludedUserIds={[authUser?._id]}
       />

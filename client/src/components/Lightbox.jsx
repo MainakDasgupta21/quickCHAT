@@ -82,7 +82,7 @@ const Lightbox = ({
         ref={closeButtonRef}
         type="button"
         onClick={onClose}
-        className="absolute right-4 top-4 z-10 h-10 w-10 rounded-full border border-white/20 bg-black/55 text-xl text-white/90"
+        className="absolute right-[max(1rem,env(safe-area-inset-right))] top-[max(1rem,env(safe-area-inset-top))] z-10 h-11 w-11 rounded-full border border-white/20 bg-black/55 text-xl text-white/90"
         aria-label="Close image viewer"
       >
         ×
@@ -92,7 +92,7 @@ const Lightbox = ({
         <button
           type="button"
           onClick={() => goToIndex(safeIndex - 1)}
-          className="absolute left-4 top-1/2 -translate-y-1/2 z-10 h-10 w-10 rounded-full border border-white/20 bg-black/55 text-2xl text-white/90"
+          className="absolute left-[max(0.75rem,env(safe-area-inset-left))] top-1/2 -translate-y-1/2 z-10 h-11 w-11 rounded-full border border-white/20 bg-black/55 text-2xl text-white/90"
           aria-label="Previous image"
         >
           ‹
@@ -103,7 +103,7 @@ const Lightbox = ({
         <button
           type="button"
           onClick={() => goToIndex(safeIndex + 1)}
-          className="absolute right-4 top-1/2 -translate-y-1/2 z-10 h-10 w-10 rounded-full border border-white/20 bg-black/55 text-2xl text-white/90"
+          className="absolute right-[max(0.75rem,env(safe-area-inset-right))] top-1/2 -translate-y-1/2 z-10 h-11 w-11 rounded-full border border-white/20 bg-black/55 text-2xl text-white/90"
           aria-label="Next image"
         >
           ›
@@ -119,7 +119,7 @@ const Lightbox = ({
       </div>
 
       {hasMultipleItems && (
-        <p className="absolute bottom-4 left-1/2 -translate-x-1/2 rounded-full border border-white/15 bg-black/50 px-3 py-1 text-xs text-white/85">
+        <p className="absolute bottom-[max(1rem,env(safe-area-inset-bottom))] left-1/2 -translate-x-1/2 rounded-full border border-white/15 bg-black/50 px-3 py-1 text-xs text-white/85">
           {safeIndex + 1} / {items.length}
         </p>
       )}

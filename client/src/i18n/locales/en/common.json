@@ -323,6 +323,7 @@
     "notificationsEnabled": "Notifications enabled",
     "browserNotificationsEnabled": "Browser notifications enabled",
     "notificationPermissionDenied": "Notification permission denied",
+    "notificationPermissionDismissed": "Notification prompt dismissed.",
     "offlinePushEnableFailed": "Could not enable offline push notifications.",
     "loginSuccess": "Login successful",
     "loginFailed": "Could not sign in",

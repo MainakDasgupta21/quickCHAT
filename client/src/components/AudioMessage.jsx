@@ -29,7 +29,7 @@ const AudioMessage = ({ src, duration = 0 }) => {
   };
 
   return (
-    <div className="w-[220px] rounded-2xl border border-white/16 bg-white/10 px-3 py-2.5 backdrop-blur-sm">
+    <div className="w-[220px] max-w-full rounded-2xl border border-white/16 bg-white/10 px-3 py-2.5 backdrop-blur-sm">
       <audio
         ref={audioRef}
         src={src}

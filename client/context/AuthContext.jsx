@@ -1,4 +1,4 @@
-import { createContext, useCallback, useEffect, useMemo, useState } from "react";
+import { createContext, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import axios from "axios";
 import toast from "react-hot-toast";
 import { io } from "socket.io-client";
@@ -90,6 +90,8 @@ export const AuthProvider = ({ children }) => {
     }
     return Notification.permission;
   });
+  const [isLoggingOut, setIsLoggingOut] = useState(false);
+  const logoutInFlightRef = useRef(false);
   const blockedUserIds = useMemo(
     () => toNormalizedBlockedUserIds(authUser?.blockedUsers),
     [authUser?.blockedUsers]
@@ -166,8 +168,8 @@ export const AuthProvider = ({ children }) => {
   }, [theme]);
 
   const syncPushSubscription = useCallback(
-    async ({ silent = false } = {}) => {
-      if (notificationPermission !== "granted") return false;
+    async ({ silent = false, permissionOverride = notificationPermission } = {}) => {
+      if (permissionOverride !== "granted") return false;
 
       try {
         const result = await subscribeCurrentDeviceForPush(axios);
@@ -193,28 +195,48 @@ export const AuthProvider = ({ children }) => {
       return "unsupported";
     }
 
-    const permission = await Notification.requestPermission();
-    setNotificationPermission(permission);
+    const currentPermission = Notification.permission;
+    setNotificationPermission(currentPermission);
 
-    if (permission === "granted") {
-      let didSyncPush = false;
-      try {
-        const result = await subscribeCurrentDeviceForPush(axios);
-        didSyncPush = Boolean(result?.success);
-      } catch {
-        didSyncPush = false;
-      }
+    if (currentPermission === "granted") {
+      const didSyncPush = await syncPushSubscription({
+        silent: true,
+        permissionOverride: "granted",
+      });
       toast.success(
         didSyncPush
           ? t("auth.notificationsEnabled")
           : t("auth.browserNotificationsEnabled")
       );
+      return currentPermission;
+    }
+
+    if (currentPermission === "denied") {
+      toast.error(t("auth.notificationPermissionDenied"));
+      return currentPermission;
+    }
+
+    const permission = await Notification.requestPermission();
+    setNotificationPermission(permission);
+
+    if (permission === "granted") {
+      const didSyncPush = await syncPushSubscription({
+        silent: true,
+        permissionOverride: "granted",
+      });
+      toast.success(
+        didSyncPush
+          ? t("auth.notificationsEnabled")
+          : t("auth.browserNotificationsEnabled")
+      );
+    } else if (permission === "default") {
+      toast(t("auth.notificationPermissionDismissed"));
     } else {
       toast.error(t("auth.notificationPermissionDenied"));
     }
 
     return permission;
-  }, [t]);
+  }, [syncPushSubscription, t]);
 
   const showNotification = useCallback(
     (title, options = {}) => {
@@ -454,28 +476,37 @@ export const AuthProvider = ({ children }) => {
   );
 
   //logout function to handle user logout and socket disconnection
-  const logout = async () => {
+  const logout = useCallback(async () => {
+    if (logoutInFlightRef.current) return false;
+    logoutInFlightRef.current = true;
+    setIsLoggingOut(true);
     try {
-      await unsubscribeCurrentDeviceFromPush(axios);
-    } catch {
-      // Best effort: local/subscription cleanup should not block logout.
+      try {
+        await unsubscribeCurrentDeviceFromPush(axios);
+      } catch {
+        // Best effort: local/subscription cleanup should not block logout.
+      }
+      try {
+        await axios.post("/api/auth/logout");
+      } catch {
+        // Best effort: still clear local auth state even if remote logout fails.
+      }
+      localStorage.removeItem("token");
+      setToken(null);
+      setAuthUser(null);
+      setBlockedUsers([]);
+      setOnlineUsers([]);
+      delete axios.defaults.headers.common["token"];
+      toast.success(t("auth.logoutSuccess"));
+      socket?.disconnect();
+      setSocket(null);
+      setConnectionStatus("disconnected");
+      return true;
+    } finally {
+      logoutInFlightRef.current = false;
+      setIsLoggingOut(false);
     }
-    try {
-      await axios.post("/api/auth/logout");
-    } catch {
-      // Best effort: still clear local auth state even if remote logout fails.
-    }
-    localStorage.removeItem("token");
-    setToken(null);
-    setAuthUser(null);
-    setBlockedUsers([]);
-    setOnlineUsers([]);
-    delete axios.defaults.headers.common["token"];
-    toast.success(t("auth.logoutSuccess"));
-    socket?.disconnect();
-    setSocket(null);
-    setConnectionStatus("disconnected");
-  };
+  }, [socket, t]);
 
   //update user profile
   const updateProfile = async (body) => {
@@ -631,6 +662,7 @@ export const AuthProvider = ({ children }) => {
     toggleTheme,
     notificationPermission,
     requestNotificationPermission,
+    isLoggingOut,
     showNotification,
     playSendCue,
     playReceiveCue,
