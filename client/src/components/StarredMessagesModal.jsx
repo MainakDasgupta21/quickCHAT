@@ -3,6 +3,7 @@ import assets from "../assets/assets";
 import { ChatContext } from "../../context/ChatContext";
 import { toNormalizedId } from "../lib/conversations";
 import { stripMarkdownForPreview } from "../lib/messageTextPreview";
+import ConversationAvatar from "./ConversationAvatar";
 
 const formatStarredTime = (value) => {
   if (!value) return "";
@@ -213,10 +214,12 @@ const StarredMessagesModal = ({ isOpen = false, onClose = () => {} }) => {
                   className="rounded-2xl border border-white/12 bg-white/[0.03]"
                 >
                   <header className="px-3.5 py-3 border-b border-white/10 flex items-center gap-2.5">
-                    <img
-                      src={conversation.avatar || assets.avatar_icon}
-                      alt=""
-                      className="h-9 w-9 rounded-full object-cover border border-white/16"
+                    <ConversationAvatar
+                      conversation={conversation}
+                      src={conversation.avatar}
+                      alt={`${conversation.title || "Conversation"} avatar`}
+                      sizeClass="h-9 w-9"
+                      imageClassName="border-white/16"
                     />
                     <div className="min-w-0">
                       <p className="text-sm text-white truncate">

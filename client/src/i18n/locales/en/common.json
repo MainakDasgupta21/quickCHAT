@@ -26,6 +26,7 @@
     "discard": "Discard",
     "submit": "Submit",
     "member": "Member",
+    "groupConversationLabel": "Group",
     "membersCount": "{{count}} members",
     "peopleCount": "{{count}} people",
     "onlineNow": "Online now",

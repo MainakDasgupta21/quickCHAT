@@ -6,6 +6,7 @@ import { AuthContext } from "../../context/AuthContext";
 import { ChatContext } from "../../context/ChatContext";
 import { useLocale } from "../../context/LocaleContext";
 import CreateGroupModal from "./CreateGroupModal";
+import ConversationAvatar from "./ConversationAvatar";
 import {
   getConversationAvatar,
   getConversationPeerId,
@@ -643,6 +644,9 @@ const Sidebar = ({
                 const isPinnedConversation = isConversationPinned(conversation);
                 const isMutedConversation = isConversationMuted(conversation);
                 const title = getConversationTitle(conversation);
+                const conversationTypeAriaSuffix = isGroupConversation(conversation)
+                  ? ` (${t("common.groupConversationLabel")})`
+                  : "";
                 const subtitle = conversation.lastMessagePreview
                   ? conversation.lastMessagePreview
                   : isGroupConversation(conversation)
@@ -659,7 +663,7 @@ const Sidebar = ({
                     key={conversationId}
                     role="listitem"
                     aria-current={isActive ? "true" : undefined}
-                    aria-label={`${title}${
+                    aria-label={`${title}${conversationTypeAriaSuffix}${
                       unreadCount ? t("sidebar.ariaUnreadSuffix", { count: unreadCount }) : ""
                     }`}
                     onClick={() => {
@@ -678,28 +682,37 @@ const Sidebar = ({
                       isMutedConversation ? "opacity-80" : ""
                     } ${isRtl ? "pl-3" : "pr-3"} stagger-item`}
                   >
-                    <div className="relative">
-                      <img
-                        src={getConversationAvatar(conversation) || assets.avatar_icon}
-                        alt={`${title} avatar`}
-                        loading="lazy"
-                        decoding="async"
-                        width="44"
-                        height="44"
-                        className="w-11 h-11 rounded-full object-cover border border-white/20"
-                      />
+                    <ConversationAvatar
+                      conversation={conversation}
+                      src={getConversationAvatar(conversation)}
+                      alt={`${title} avatar`}
+                      sizeClass="h-11 w-11"
+                      imageClassName="border-white/20"
+                    >
                       {isDirectConversation(conversation) && directOnline && (
                         <>
-                          <span className="absolute -bottom-0.5 -right-0.5 h-3.5 w-3.5 rounded-full bg-success border-2 border-surface-900" />
-                          <span className="absolute -bottom-0.5 -right-0.5 h-3.5 w-3.5 rounded-full bg-success/80 animate-pulse-ring" />
+                          <span
+                            className={`absolute -bottom-0.5 h-3.5 w-3.5 rounded-full bg-success border-2 border-surface-900 ${
+                              isRtl ? "-left-0.5" : "-right-0.5"
+                            }`}
+                          />
+                          <span
+                            className={`absolute -bottom-0.5 h-3.5 w-3.5 rounded-full bg-success/80 animate-pulse-ring ${
+                              isRtl ? "-left-0.5" : "-right-0.5"
+                            }`}
+                          />
                         </>
                       )}
                       {isGroupConversation(conversation) && onlineParticipantsCount > 0 && (
-                        <span className="absolute -bottom-0.5 -right-0.5 min-w-4 h-4 px-1 rounded-full bg-success text-[10px] leading-4 text-surface-900 font-semibold border border-surface-900">
+                        <span
+                          className={`absolute -bottom-0.5 min-w-4 h-4 px-1 rounded-full bg-success text-[10px] leading-4 text-surface-900 font-semibold border border-surface-900 ${
+                            isRtl ? "-left-0.5" : "-right-0.5"
+                          }`}
+                        >
                           {onlineParticipantsCount}
                         </span>
                       )}
-                    </div>
+                    </ConversationAvatar>
                     <div className="min-w-0 flex-1">
                       <p className="truncate text-sm font-medium tracking-wide">{title}</p>
                       <p className="text-xs text-white/55 truncate mt-0.5">{subtitle}</p>

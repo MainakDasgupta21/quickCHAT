@@ -37,6 +37,7 @@ import MessageList from "./MessageList";
 import RightSidebar from "./RightSidebar";
 import ForwardMessageModal from "./ForwardMessageModal";
 import ReportModal from "./ReportModal";
+import ConversationAvatar from "./ConversationAvatar";
 
 const EmojiPicker = lazy(() => import("emoji-picker-react"));
 
@@ -1338,15 +1339,14 @@ const ChatContainer = ({
     <div className="h-full min-h-0 flex flex-col bg-[linear-gradient(180deg,rgba(20,17,32,0.32),rgba(15,13,24,0.82))] relative">
       <div className="shrink-0 z-30 px-4 py-3 border-b border-white/10 glass-subtle">
         <div className="chat-column flex items-center gap-3">
-          <div className="relative">
-            <img
-              src={selectedConversationAvatar || assets.avatar_icon}
-              alt={`${selectedConversationTitle} profile`}
-              decoding="async"
-              width="40"
-              height="40"
-              className="w-10 h-10 rounded-full object-cover border border-white/20"
-            />
+          <ConversationAvatar
+            conversation={selectedConversation}
+            src={selectedConversationAvatar}
+            alt={`${selectedConversationTitle} profile`}
+            sizeClass="w-10 h-10"
+            imageClassName="border-white/20"
+            loading="eager"
+          >
             {isDirectSelectedConversation && isDirectPeerOnline && (
               <>
                 <span
@@ -1361,7 +1361,7 @@ const ChatContainer = ({
                 />
               </>
             )}
-          </div>
+          </ConversationAvatar>
           <div className="flex-1 min-w-0">
             <p className="text-base font-medium text-white truncate">
               {selectedConversationTitle}

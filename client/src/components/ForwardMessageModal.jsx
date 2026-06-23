@@ -6,6 +6,7 @@ import {
   getConversationTitle,
   toNormalizedId,
 } from "../lib/conversations";
+import ConversationAvatar from "./ConversationAvatar";
 
 const toSourceMessagePreview = (message) => {
   if (!message) return "";
@@ -180,10 +181,12 @@ const ForwardMessageModal = ({
                     : "border-white/12 bg-white/[0.03] hover:border-white/20 hover:bg-white/[0.05]"
                 }`}
               >
-                <img
-                  src={getConversationAvatar(conversation) || assets.avatar_icon}
-                  alt=""
-                  className="h-10 w-10 rounded-full object-cover border border-white/16"
+                <ConversationAvatar
+                  conversation={conversation}
+                  src={getConversationAvatar(conversation)}
+                  alt={`${getConversationTitle(conversation)} avatar`}
+                  sizeClass="h-10 w-10"
+                  imageClassName="border-white/16"
                 />
                 <div className="min-w-0 flex-1">
                   <p className="text-sm text-white truncate">{getConversationTitle(conversation)}</p>

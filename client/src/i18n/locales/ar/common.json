@@ -26,6 +26,7 @@
     "discard": "تجاهل",
     "submit": "إرسال",
     "member": "عضو",
+    "groupConversationLabel": "مجموعة",
     "membersCount": "{{count}} أعضاء",
     "peopleCount": "{{count}} أشخاص",
     "onlineNow": "متصل الآن",

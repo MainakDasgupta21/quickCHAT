@@ -6,6 +6,7 @@ import { AuthContext } from "../../context/AuthContext";
 import { useLocale } from "../../context/LocaleContext";
 import CreateGroupModal from "./CreateGroupModal";
 import ReportModal from "./ReportModal";
+import ConversationAvatar from "./ConversationAvatar";
 import {
   getConversationAvatar,
   getConversationPeerId,
@@ -161,27 +162,31 @@ const RightSidebar = ({
       <div className="glass-panel rounded-3xl p-5 text-center animate-slide-up">
         <div className="relative w-fit mx-auto">
           <div className="h-24 w-24 rounded-full p-[2px] bg-[linear-gradient(135deg,#a786ff,#5f47e6)]">
-            <img
-              src={getConversationAvatar(selectedConversation) || assets.avatar_icon}
+            <ConversationAvatar
+              conversation={selectedConversation}
+              src={getConversationAvatar(selectedConversation)}
               alt={`${getConversationTitle(selectedConversation)} profile`}
-              decoding="async"
-              className="h-full w-full rounded-full object-cover border border-white/15"
-            />
+              sizeClass="h-full w-full"
+              imageClassName="border-white/15"
+              badgeSize="md"
+              loading="eager"
+            >
+              {isDirect && isDirectPeerOnline && (
+                <>
+                  <span
+                    className={`absolute bottom-1 h-3.5 w-3.5 rounded-full bg-success border-2 border-surface-900 ${
+                      isRtl ? "left-1" : "right-1"
+                    }`}
+                  />
+                  <span
+                    className={`absolute bottom-1 h-3.5 w-3.5 rounded-full bg-success/80 animate-pulse-ring ${
+                      isRtl ? "left-1" : "right-1"
+                    }`}
+                  />
+                </>
+              )}
+            </ConversationAvatar>
           </div>
-          {isDirect && isDirectPeerOnline && (
-            <>
-              <span
-                className={`absolute bottom-1 h-3.5 w-3.5 rounded-full bg-success border-2 border-surface-900 ${
-                  isRtl ? "left-1" : "right-1"
-                }`}
-              />
-              <span
-                className={`absolute bottom-1 h-3.5 w-3.5 rounded-full bg-success/80 animate-pulse-ring ${
-                  isRtl ? "left-1" : "right-1"
-                }`}
-              />
-            </>
-          )}
         </div>
 
         <h1 className="mt-4 text-xl font-semibold tracking-wide">
